@@ -332,6 +332,10 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
     for pno in range(len(doc)):
         page = doc[pno]
         w, h = page.rect.width, page.rect.height
+        
+        # [수정] 페이지 내 모든 텍스트 블록을 미리 가져옴 (위쪽 글자 충돌 감지용)
+        page_blocks = page.get_text("blocks") 
+
         mid = find_module_on_page(page)
         if mid is not None: current_module = mid
         if current_module not in (1, 2): continue
@@ -340,7 +344,31 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
         if not anchors: continue
 
         for i, (qnum, y0) in enumerate(anchors):
-            y_start = clamp(y0 - pad_top, 0, h)
+            # 1. 기본 위쪽 여백 계산
+            y_start_candidate = clamp(y0 - pad_top, 0, h)
+            
+            # [수정] 위쪽 여백 공간에 다른 글자가 끼어있는지 확인 (헤더 방지 로직)
+            # 번호(y0)보다 위에 있고, 우리가 자르려는 선(y_start_candidate)보다 아래에 끝나는 글자가 있으면
+            # 그 글자 바로 밑으로 시작점을 내립니다.
+            safe_y = y_start_candidate
+            for b in page_blocks:
+                # b = (x0, y0, x1, y1, text, block_no, line_no)
+                b_y1 = b[3] # 글자 블록의 바닥 좌표
+                b_text = b[4]
+                
+                # 헤더/푸터 힌트가 있는 텍스트는 무조건 피함
+                if HEADER_FOOTER_HINT_RE.search(b_text):
+                    if b_y1 < y0 and b_y1 > safe_y:
+                        safe_y = b_y1 + 2 # 글자 2px 밑에서 자름
+                else:
+                    # 일반 텍스트라도 번호 바로 위의 여백 영역을 침범하면 피함
+                    # (단, 번호 자체인 경우는 제외하기 위해 y0보다 확실히 위에 있는 것만 체크)
+                    if b_y1 > safe_y and b_y1 < y0 - 2: 
+                        safe_y = b_y1 + 2
+
+            y_start = clamp(safe_y, 0, h)
+
+            # 2. 아래쪽 여백 계산 (기존과 동일)
             if i + 1 < len(anchors):
                 next_y = anchors[i + 1][1]
                 y_cap = clamp(next_y - 1, 0, h)
@@ -416,9 +444,8 @@ def make_zip_from_rects(doc, rects, zoom, zip_base_name, unify_width_right=True)
 # =========================================================
 # 메인 UI 구조
 # =========================================================
-st.title("SAT 자료 가공 도구 모음")
 
-tab1, tab2 = st.tabs(["📝 오답노트 생성기", "✂️ PDF 문제 자르기 (PNG 변환)"])
+tab1, tab2 = st.tabs(["📝 오답노트 생성기", "✂️ PDF 문제 이미지"])
 
 # ---------------------------------------------------------
 # [Tab 1] 오답노트 생성기
@@ -433,23 +460,31 @@ with tab1:
         st.session_state.zip_buffer = None
 
     st.markdown("---")
-    st.subheader("1️⃣ 예시 엑셀 양식 다운로드")
-    col1, col2 = st.columns([1, 1])
-    with col1:
+    st.subheader("📊 예시 엑셀 양식")
+    
+    # [수정됨] 클릭하면 표가 열리고, 다운로드 버튼이 있는 기존 스타일로 복구
+    with st.expander("예시 엑셀파일 미리보기 (클릭하여 열기)"):
         st.dataframe(example_input_df(), use_container_width=True)
-    with col2:
-        example = get_example_excel()
-        st.download_button(
-            "📥 예시 엑셀파일 다운로드", 
-            example, 
-            file_name="Mock결과_양식.xlsx"
-        )
+    
+    example = get_example_excel()
+    st.download_button(
+        "📥 예시 엑셀파일 다운로드 (Mock결과_양식.xlsx)", 
+        example, 
+        file_name="Mock결과_양식.xlsx"
+    )
 
     st.markdown("---")
-    st.subheader("2️⃣ 파일 업로드 및 설정")
-    doc_title = st.text_input("문서 제목", value="25 S2 SAT MATH 만점반 Mock Test1", key="t1_title")
-    img_zip = st.file_uploader("문제 이미지 ZIP (m1, m2 폴더)", type="zip", key="t1_zip")
-    excel_file = st.file_uploader("오답 현황 엑셀", type="xlsx", key="t1_excel")
+
+    st.header("📄 문서 제목 입력")
+    doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1)", value="25 S2 SAT MATH 만점반 Mock Test1")
+
+    st.header("📦 파일 업로드")
+    st.caption("M1, M2 폴더 포함된 ZIP 파일 업로드")
+    img_zip = st.file_uploader("문제 ZIP 파일", type="zip")
+
+    st.caption("Mock 결과 엑셀 파일 업로드 (.xlsx) — 열 이름은 '이름', 'Module1', 'Module2' (오타/혼용도 허용)")
+    excel_file = st.file_uploader("오답 현황 엑셀", type="xlsx")
+
 
     if st.button("🚀 오답노트 생성 시작", type="primary", key="t1_btn"):
         if not img_zip or not excel_file:
@@ -541,8 +576,8 @@ with tab1:
 # [Tab 2] PDF 문제 자르기
 # ---------------------------------------------------------
 with tab2:
-    st.header("✂️ SAT PDF → 문제별 PNG 자르기")
-    st.info("SAT 수학 PDF를 업로드하면 문제 번호를 인식하여 개별 이미지(PNG)로 자르고 ZIP으로 제공합니다.")
+    st.header("✂️문제캡처 ZIP생성기")
+    st.info("SAT Mock PDF를 업로드하면 문제 번호를 인식하여 개별 이미지(PNG)로 자르고 오답노트 생성기에 연동가능한 양식의 ZIP파일로 정리해줍니다")
 
     pdf_file = st.file_uploader("PDF 파일 업로드", type=["pdf"], key="t2_pdf")
 
