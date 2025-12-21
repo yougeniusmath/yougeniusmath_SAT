@@ -26,7 +26,7 @@ if font_ready:
     class KoreanPDF(FPDF):
         def __init__(self):
             super().__init__()
-            self.set_margins(25.4, 30, 25.4)
+            self.set_margins(25.4, 30, 25.4) # 좌/우 여백 약 2.5cm
             self.set_auto_page_break(auto=True, margin=25.4)
             self.add_font(pdf_font_name, '', FONT_REGULAR, uni=True)
             self.add_font(pdf_font_name, 'B', FONT_BOLD, uni=True)
@@ -82,11 +82,11 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def example_input_df():
     return pd.DataFrame({
-        '학생 이름': ['홍길동', '김철수', '이영희'],
-        '[M1] 점수': [100, 90, 100],
-        '[M1] 틀린 문제': ['1,3,5', 'X', 'X'],
-        '[M2] 점수': [95, 85, 100],
-        '[M2] 틀린 문제': ['X', '1,3', 'X']
+        '학생 이름': ['홍길동', '김철수', '이영희', '박지성', '손흥민'],
+        '[M1] 점수': [100, 90, 100, 50, None],
+        '[M1] 틀린 문제': ['1,3,5', 'X', 'X', '1', None],
+        '[M2] 점수': [95, 85, 100, None, None],
+        '[M2] 틀린 문제': ['X', '1,3', 'X', None, None]
     })
 
 def get_example_excel():
@@ -112,6 +112,7 @@ def extract_zip_to_dict(zip_file):
                     elif folder == "m2": m2_imgs[q_num] = img
     return m1_imgs, m2_imgs
 
+# [수정] 이미지 너비를 150mm로 고정 (슬라이더 제거됨)
 def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     if not font_ready: return None
     pdf = KoreanPDF()
@@ -120,25 +121,24 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     pdf.cell(0, 8, txt=f"<{name}_{doc_title}>", ln=True)
 
     def add_images(title, images):
-        img_est_height = 100
-        # 이미지가 있을 때만 페이지 넘김 체크
-        if images and (pdf.get_y() + 10 + img_est_height > pdf.page_break_trigger):
+        est_height = 80 
+        if images and (pdf.get_y() + 10 + est_height > pdf.page_break_trigger):
             pdf.add_page()
 
         pdf.set_font(pdf_font_name, size=10)
         pdf.cell(0, 8, txt=title, ln=True)
         
-        # 이미지가 있으면 출력, 없으면 아무 텍스트도 안 쓰고 줄바꿈만 함
         if images:
             for img in images:
                 temp_filename = f"temp_{datetime.now().timestamp()}_{os.urandom(4).hex()}.jpg"
                 img.save(temp_filename)
-                pdf.image(temp_filename, w=180)
+                # [고정] A4 여백 고려하여 가장 예쁜 사이즈 150mm로 고정
+                pdf.image(temp_filename, w=150)
                 try: os.remove(temp_filename)
                 except: pass
                 pdf.ln(8)
         else:
-            pdf.ln(8) # 이미지가 없으면 그냥 공백
+            pdf.ln(8)
 
     add_images("<Module1>", m1_imgs)
     add_images("<Module2>", m2_imgs)
@@ -450,8 +450,8 @@ with tab1:
         st.session_state.generated_files = []
     if 'zip_buffer' not in st.session_state:
         st.session_state.zip_buffer = None
-    if 'skipped_files' not in st.session_state:
-        st.session_state.skipped_files = []
+    if 'skipped_details' not in st.session_state:
+        st.session_state.skipped_details = {}
 
     st.markdown("---")
     st.subheader("📊 예시 엑셀 양식")
@@ -503,29 +503,40 @@ with tab1:
                 os.makedirs(output_dir, exist_ok=True)
                 
                 temp_files = []
-                skipped_list = []
+                skipped_details = {"만점": [], "M1/M2 하나 미제출": [], "미제출": []}
                 progress_bar = st.progress(0)
                 
                 for idx, row in df.iterrows():
                     name = row['이름']
                     
-                    def to_list(x):
-                        if pd.isna(x): return []
+                    def parse_module_data(x):
+                        if pd.isna(x): return None
                         s = str(x).strip()
-                        if s in ["", "X", "x", "-", "Х"]: return []
+                        if s == "": return None  
+                        if s.upper() in ["X", "Х", "-"]: return [] 
+                        
                         s = s.replace("，", ",").replace(";", ",")
-                        return [t.strip() for t in s.split(",") if t.strip()]
+                        nums = [t.strip() for t in s.split(",") if t.strip()]
+                        return nums if nums else [] 
 
-                    m1_nums = to_list(row['Module1'])
-                    m2_nums = to_list(row['Module2'])
+                    m1_data = parse_module_data(row['Module1'])
+                    m2_data = parse_module_data(row['Module2'])
                     
-                    m1_list = [m1_imgs[n] for n in m1_nums if n in m1_imgs]
-                    m2_list = [m2_imgs[n] for n in m2_nums if n in m2_imgs]
-
-                    if not m1_list and not m2_list:
-                        skipped_list.append(name)
+                    skip_reason = None
+                    if m1_data is None and m2_data is None:
+                        skip_reason = "미제출"
+                    elif m1_data is None or m2_data is None:
+                        skip_reason = "M1/M2 하나 미제출"
+                    elif len(m1_data) == 0 and len(m2_data) == 0:
+                        skip_reason = "만점"
+                    
+                    if skip_reason:
+                        skipped_details[skip_reason].append(name)
                         progress_bar.progress((idx + 1) / len(df))
                         continue
+
+                    m1_list = [m1_imgs[n] for n in m1_data] if m1_data else []
+                    m2_list = [m2_imgs[n] for n in m2_data] if m2_data else []
 
                     pdf_path = create_student_pdf(name, m1_list, m2_list, doc_title, output_dir)
                     if pdf_path:
@@ -533,7 +544,7 @@ with tab1:
                     progress_bar.progress((idx + 1) / len(df))
 
                 st.session_state.generated_files = temp_files
-                st.session_state.skipped_files = skipped_list
+                st.session_state.skipped_details = skipped_details
 
                 if temp_files:
                     zip_buf = io.BytesIO()
@@ -544,13 +555,31 @@ with tab1:
                     st.session_state.zip_buffer = zip_buf
                     
                     st.success(f"✅ 총 {len(temp_files)}명의 오답노트 생성 완료!")
-                    if skipped_list:
-                        st.info(f"⏭️ 생성 제외 (오답 없음/만점): {len(skipped_list)}명\n\n({', '.join(skipped_list)})")
                 else:
-                    if skipped_list:
-                         st.warning(f"생성된 파일이 없습니다. (모든 학생이 오답 없음/미제출입니다.)\n\n제외된 명단: {', '.join(skipped_list)}")
-                    else:
-                        st.warning("생성된 파일이 없습니다.")
+                    st.warning("생성된 파일이 없습니다.")
+                
+                total_skipped = sum(len(v) for v in skipped_details.values())
+                if total_skipped > 0:
+                    with st.expander(f"📋 생성 제외 명단 (총 {total_skipped}명) - 클릭하여 보기", expanded=True):
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.markdown("**🏆 만점 (Perfect)**")
+                            if skipped_details["만점"]:
+                                for n in skipped_details["만점"]: st.text(f"- {n}")
+                            else:
+                                st.caption("없음")
+                        with c2:
+                            st.markdown("**⚠️ 하나 미제출**")
+                            if skipped_details["M1/M2 하나 미제출"]:
+                                for n in skipped_details["M1/M2 하나 미제출"]: st.text(f"- {n}")
+                            else:
+                                st.caption("없음")
+                        with c3:
+                            st.markdown("**❌ 미제출**")
+                            if skipped_details["미제출"]:
+                                for n in skipped_details["미제출"]: st.text(f"- {n}")
+                            else:
+                                st.caption("없음")
 
             except Exception as e:
                 st.error(f"오류 발생: {e}")
@@ -559,11 +588,6 @@ with tab1:
         st.markdown("---")
         st.header("💾 다운로드")
         
-        if st.session_state.skipped_files:
-             with st.expander("📋 생성 결과 상세 보기 (제외 명단)"):
-                 st.write(f"**총 {len(st.session_state.generated_files)}명 생성됨**")
-                 st.write(f"**제외된 학생 ({len(st.session_state.skipped_files)}명):** {', '.join(st.session_state.skipped_files)}")
-
         if st.session_state.zip_buffer:
             st.download_button(
                 "📦 전체 오답노트 ZIP 다운로드",
