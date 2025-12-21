@@ -954,32 +954,32 @@ with tab3:
 
 
         
-        # KPI (score는 "xx / 22" 그대로 표시)
-        kpi_h = 21*mm
-        gap = 5*mm
+        # ===== KPI =====
+        kpi_h = 21 * mm
+        gap = 5 * mm
         kpi_w = (usable_w - gap) / 2
-        kpi_y = header_y - 6*mm - kpi_h
+        kpi_y = header_y - 6 * mm - kpi_h
 
-def draw_kpi_card(x, y, label, score_txt, dt, t):
-    draw_round_rect(c, x, y, kpi_w, kpi_h, 8*mm, colors.white, stroke, 1)
+        def draw_kpi_card(x, y, label, score_txt, dt, t):
+            draw_round_rect(c, x, y, kpi_w, kpi_h, 8 * mm, colors.white, stroke, 1)
 
-    # Module label
-    c.setFillColor(colors.Color(2/255, 6/255, 23/255))
-    c.setFont("NanumGothic-Bold", 11.5)
-    c.drawString(x + 6*mm, y + kpi_h - 8.2*mm, label)
+            # Module label
+            c.setFillColor(colors.Color(2/255, 6/255, 23/255))
+            c.setFont("NanumGothic-Bold", 11.5)
+            c.drawString(x + 6 * mm, y + kpi_h - 8.2 * mm, label)
 
-    # ✅ Score 위로 올림
-    c.setFont("NanumGothic-Bold", 18)
-    c.setFillColor(title_col)
-    c.drawRightString(x + kpi_w - 6*mm, y + kpi_h - 12.6*mm, str(score_txt))
+            # Score (위로 올림)
+            c.setFont("NanumGothic-Bold", 18)
+            c.setFillColor(title_col)
+            c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 12.6 * mm, str(score_txt))
 
-    # ✅ 라벨(Date/Time, Time) 제거하고 값만
-    c.setFont("NanumGothic", 9)
-    c.setFillColor(muted)
-    c.drawString(x + 6*mm, y + 3.8*mm, f"{dt}")
-    c.drawRightString(x + kpi_w - 6*mm, y + 3.8*mm, f"{t}")
+            # Date/Time, Time 라벨 제거 -> 값만 출력
+            c.setFont("NanumGothic", 9)
+            c.setFillColor(muted)
+            c.drawString(x + 6 * mm, y + 3.8 * mm, f"{dt}")
+            c.drawRightString(x + kpi_w - 6 * mm, y + 3.8 * mm, f"{t}")
 
-
+        # KPI cards (반드시 create_report_pdf_reportlab 함수 '안'에서 실행)
         draw_kpi_card(L, kpi_y, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
         draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
