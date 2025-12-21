@@ -12,7 +12,7 @@ import fitz  # PyMuPDF
 # ==============================
 # 0. 기본 설정
 # ==============================
-st.set_page_config(page_title="SAT 자료 가공 도구", layout="centered")
+st.set_page_config(page_title="SAT MATH", layout="centered")
 
 # 폰트 설정 (오답노트용)
 FONT_REGULAR = "fonts/NanumGothic.ttf"
@@ -26,7 +26,7 @@ if font_ready:
     class KoreanPDF(FPDF):
         def __init__(self):
             super().__init__()
-            self.set_margins(25.4, 30, 25.4) # 좌/우 여백 약 2.5cm
+            self.set_margins(25.4, 30, 25.4)
             self.set_auto_page_break(auto=True, margin=25.4)
             self.add_font(pdf_font_name, '', FONT_REGULAR, uni=True)
             self.add_font(pdf_font_name, 'B', FONT_BOLD, uni=True)
@@ -112,7 +112,6 @@ def extract_zip_to_dict(zip_file):
                     elif folder == "m2": m2_imgs[q_num] = img
     return m1_imgs, m2_imgs
 
-# [수정] 이미지 너비를 150mm로 고정 (슬라이더 제거됨)
 def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     if not font_ready: return None
     pdf = KoreanPDF()
@@ -461,7 +460,7 @@ with tab1:
     
     example = get_example_excel()
     st.download_button(
-        "📥 예시 엑셀파일 다운로드 (Mock결과_양식.xlsx)", 
+        "📥 예시 엑셀파일 다운로드 (.xlsx)", 
         example, 
         file_name="Mock결과_양식.xlsx"
     )
@@ -473,15 +472,13 @@ with tab1:
     st.header("📦 파일 업로드")
 
     st.write("") 
-    st.markdown("#### 1. 문제 이미지 ZIP 파일")
-    st.caption("`m1`, `m2` 폴더가 들어있는 ZIP 파일을 업로드해주세요.")
-    img_zip = st.file_uploader("문제 ZIP 파일", type="zip", key="t1_zip") 
+    st.markdown("#### 문제 이미지 ZIP 파일")
+    img_zip = st.file_uploader("m1, m2 폴더가 들어있는 ZIP 파일", type="zip", key="t1_zip") 
 
     st.markdown("---") 
 
-    st.markdown("#### 2. 오답 현황 엑셀 파일")
-    st.caption("학생들의 결과 데이터가 담긴 엑셀 파일을 업로드해주세요.")
-    excel_file = st.file_uploader("결과파일 엑셀", type="xlsx", key="t1_excel")
+    st.markdown("#### 오답 현황 엑셀 파일")
+    excel_file = st.file_uploader("학생들의 결과 데이터가 담긴 엑셀 파일", type="xlsx", key="t1_excel")
 
     st.write("") 
 
@@ -558,33 +555,37 @@ with tab1:
                 else:
                     st.warning("생성된 파일이 없습니다.")
                 
-                total_skipped = sum(len(v) for v in skipped_details.values())
-                if total_skipped > 0:
-                    with st.expander(f"📋 생성 제외 명단 (총 {total_skipped}명) - 클릭하여 보기", expanded=True):
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            st.markdown("**🏆 만점 (Perfect)**")
-                            if skipped_details["만점"]:
-                                for n in skipped_details["만점"]: st.text(f"- {n}")
-                            else:
-                                st.caption("없음")
-                        with c2:
-                            st.markdown("**⚠️ 하나 미제출**")
-                            if skipped_details["M1/M2 하나 미제출"]:
-                                for n in skipped_details["M1/M2 하나 미제출"]: st.text(f"- {n}")
-                            else:
-                                st.caption("없음")
-                        with c3:
-                            st.markdown("**❌ 미제출**")
-                            if skipped_details["미제출"]:
-                                for n in skipped_details["미제출"]: st.text(f"- {n}")
-                            else:
-                                st.caption("없음")
-
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
-    if st.session_state.generated_files:
+    # [수정] 결과 표시 로직을 버튼 밖으로 빼서 다운로드 시에도 유지되게 함
+    if st.session_state.generated_files or st.session_state.skipped_details:
+        
+        # 상세 결과 리포트 출력 (항상 보이게)
+        if st.session_state.skipped_details:
+            total_skipped = sum(len(v) for v in st.session_state.skipped_details.values())
+            if total_skipped > 0:
+                with st.expander(f"📋 생성 제외 명단 (총 {total_skipped}명) - 클릭하여 보기", expanded=True):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.markdown("**🏆 만점 (Perfect)**")
+                        if st.session_state.skipped_details["만점"]:
+                            for n in st.session_state.skipped_details["만점"]: st.text(f"- {n}")
+                        else:
+                            st.caption("없음")
+                    with c2:
+                        st.markdown("**⚠️ 하나 미제출**")
+                        if st.session_state.skipped_details["M1/M2 하나 미제출"]:
+                            for n in st.session_state.skipped_details["M1/M2 하나 미제출"]: st.text(f"- {n}")
+                        else:
+                            st.caption("없음")
+                    with c3:
+                        st.markdown("**❌ 미제출**")
+                        if st.session_state.skipped_details["미제출"]:
+                            for n in st.session_state.skipped_details["미제출"]: st.text(f"- {n}")
+                        else:
+                            st.caption("없음")
+
         st.markdown("---")
         st.header("💾 다운로드")
         
