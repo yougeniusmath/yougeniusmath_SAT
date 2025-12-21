@@ -664,8 +664,10 @@ with tab2:
                     )
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
+
+
 # ---------------------------------------------------------
-# [Tab 3] 개인 성적표 (ReportLab / Student Analysis 학생목록 + QuizResults 메타)
+# [Tab 3] 개인 성적표 (Student Analysis 학생목록 + QuizResults 메타 + Mock/오답률)
 # ---------------------------------------------------------
 with tab3:
     st.header("📊 개인 성적표")
@@ -683,21 +685,23 @@ with tab3:
     st.caption("부제목은 QuizResults의 '검색 키워드'가 학생별로 자동으로 들어갑니다.")
 
     # =========================
-    # 고정 규칙
+    # 시트/헤더 규칙 (ETA(1).xlsx 실물 기준)
     # =========================
-    HEADER_ROW_IDX = 1  # ✅ 2행이 헤더(엑셀 2행 -> pandas index 1)
-
     STUDENT_SHEET = "Student Analysis"
     QUIZ_SHEET = "QuizResults"
     ERROR_SHEET = "Error Analysis"
+
+    SA_HEADER_ROW_IDX = 1  # ✅ Student Analysis: 2행이 헤더
+    QZ_HEADER_ROW_IDX = 0  # ✅ QuizResults: 1행이 헤더
 
     # Student Analysis: 학생목록은 무조건 여기서만
     SA_NAME_COL = "학생 이름"
     SA_M1_SCORE_COL = "[M1] 점수"
     SA_M2_SCORE_COL = "[M2] 점수"
 
-    # QuizResults: 메타는 여기서만 (너가 준 고정 컬럼명)
+    # QuizResults: 메타는 여기서만 (너가 준 고정 컬럼명 = 실제 파일과 일치)
     QZ_KEYWORD_COL = "검색 키워드"
+    QZ_SUBJECT_COL = "메일 제목"
     QZ_MODULE_COL  = "모듈"
     QZ_NAME_COL    = "학생 이름"
     QZ_DT_COL      = "응답 날짜"
@@ -722,7 +726,7 @@ with tab3:
             return set()
         s = s.replace("，", ",").replace(";", ",")
         nums = [t.strip() for t in s.split(",") if t.strip()]
-        out=set()
+        out = set()
         for n in nums:
             try:
                 out.add(int(float(n)))
@@ -742,6 +746,19 @@ with tab3:
         except:
             return "-"
 
+    def score_to_slash22(s):
+        """
+        QuizResults '점수'가 이미 '19 / 22' 형태로 들어오기도 함.
+        - 이미 '/' 있으면 그대로
+        - 아니면 '점수 / 22'
+        """
+        s = _clean(s)
+        if s == "":
+            return ""
+        if "/" in s:
+            return s
+        return f"{s} / 22"
+
     def assert_columns(df, cols, label):
         missing = [c for c in cols if c not in df.columns]
         if missing:
@@ -752,7 +769,7 @@ with tab3:
     # ✅ Error Analysis 오답률 고정 범위: M1=C3:C24, M2=C26:C47
     def build_wrong_rate_dict_fixed_ranges(eta_xl):
         df = pd.read_excel(eta_xl, sheet_name=ERROR_SHEET, header=None)
-        colC = df.iloc[:, 2].tolist()  # C열(0-based idx=2)
+        colC = df.iloc[:, 2].tolist()  # C열
 
         m1_vals = colC[2:24]    # C3:C24 (22개)
         m2_vals = colC[25:47]   # C26:C47 (22개)
@@ -780,11 +797,11 @@ with tab3:
             m2 = {int(k): _clean(v) for k, v in m2.items() if str(k).strip().isdigit()}
             return m1, m2
 
-        # fallback: marker 방식
+        # fallback
         c0, c1 = df.columns[0], df.columns[1]
         m2_idxs = df.index[df[c0].astype(str).str.contains("Module2", case=False, na=False)].tolist()
         if not m2_idxs:
-            out={}
+            out = {}
             for _, r in df.iterrows():
                 try: q = int(str(r[c0]).strip())
                 except: continue
@@ -928,7 +945,7 @@ with tab3:
         c.setFont("NanumGothic-Bold", name_fs)
         c.drawRightString(pill_x + pill_w - 5*mm, pill_y + 4.2*mm, student_name)
 
-        # KPI
+        # KPI (score는 "xx / 22" 그대로 표시)
         kpi_h = 21*mm
         gap = 5*mm
         kpi_w = (usable_w - gap) / 2
@@ -1058,18 +1075,18 @@ with tab3:
         try:
             eta_xl = pd.ExcelFile(eta_file)
 
-            # ---- Student Analysis: 학생목록 ONLY ----
+            # ---- Student Analysis: 학생목록 ONLY (2행 헤더) ----
             if STUDENT_SHEET not in eta_xl.sheet_names:
                 st.error(f"⚠️ ETA.xlsx에 '{STUDENT_SHEET}' 시트가 없습니다.")
                 st.stop()
 
             raw_sa = pd.read_excel(eta_xl, sheet_name=STUDENT_SHEET, header=None)
-            if raw_sa.shape[0] <= HEADER_ROW_IDX:
+            if raw_sa.shape[0] <= SA_HEADER_ROW_IDX:
                 st.error("⚠️ Student Analysis에서 2행(헤더)을 찾을 수 없습니다.")
                 st.stop()
 
-            sa_header = raw_sa.iloc[HEADER_ROW_IDX].astype(str).tolist()
-            student_df = raw_sa.iloc[HEADER_ROW_IDX + 1:].copy()
+            sa_header = raw_sa.iloc[SA_HEADER_ROW_IDX].astype(str).tolist()
+            student_df = raw_sa.iloc[SA_HEADER_ROW_IDX + 1:].copy()
             student_df.columns = sa_header
             student_df = student_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
             assert_columns(student_df, [SA_NAME_COL, SA_M1_SCORE_COL, SA_M2_SCORE_COL], STUDENT_SHEET)
@@ -1080,34 +1097,28 @@ with tab3:
                 st.error("학생 목록이 비어있습니다.")
                 st.stop()
 
-            # ---- QuizResults: Date/Time/Time/Score/Wrong/Keyword ----
+            # ---- QuizResults: 1행 헤더 ----
             if QUIZ_SHEET not in eta_xl.sheet_names:
                 st.error(f"⚠️ ETA.xlsx에 '{QUIZ_SHEET}' 시트가 없습니다.")
                 st.stop()
 
-            raw_qz = pd.read_excel(eta_xl, sheet_name=QUIZ_SHEET, header=None)
-            if raw_qz.shape[0] <= HEADER_ROW_IDX:
-                st.error("⚠️ QuizResults에서 2행(헤더)을 찾을 수 없습니다.")
-                st.stop()
-
-            qz_header = raw_qz.iloc[HEADER_ROW_IDX].astype(str).tolist()
-            quiz_df = raw_qz.iloc[HEADER_ROW_IDX + 1:].copy()
-            quiz_df.columns = qz_header
+            quiz_df = pd.read_excel(eta_xl, sheet_name=QUIZ_SHEET, header=QZ_HEADER_ROW_IDX)
+            quiz_df.columns = [str(c).strip() for c in quiz_df.columns]
             quiz_df = quiz_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
 
             assert_columns(
                 quiz_df,
-                [QZ_KEYWORD_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
+                [QZ_KEYWORD_COL, QZ_SUBJECT_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
                 QUIZ_SHEET
             )
 
-            quiz_map = {}  # {name: {1:{...}, 2:{...}}}
+            # {name: {1:{...}, 2:{...}}}
+            quiz_map = {}
             for _, r in quiz_df.iterrows():
                 nm = _clean(r.get(QZ_NAME_COL, ""))
                 md = _clean(r.get(QZ_MODULE_COL, "")).upper()
                 if nm == "":
                     continue
-
                 if md in ["M1", "MODULE1", "1"]:
                     mod = 1
                 elif md in ["M2", "MODULE2", "2"]:
@@ -1118,7 +1129,7 @@ with tab3:
                 quiz_map.setdefault(nm, {})[mod] = {
                     "dt": _clean(r.get(QZ_DT_COL, "")) or "-",
                     "time": _clean(r.get(QZ_TIME_COL, "")) or "-",
-                    "score": _clean(r.get(QZ_SCORE_COL, "")) or "",
+                    "score": score_to_slash22(r.get(QZ_SCORE_COL, "")),
                     "wrong_set": parse_wrong_list(r.get(QZ_WRONG_COL, "")),
                     "keyword": _clean(r.get(QZ_KEYWORD_COL, "")) or "",
                 }
@@ -1145,20 +1156,20 @@ with tab3:
                 m1 = q.get(1, {})
                 m2 = q.get(2, {})
 
-                m1_score_raw = _clean(m1.get("score", ""))
-                m2_score_raw = _clean(m2.get("score", ""))
+                m1_score_txt = _clean(m1.get("score", ""))
+                m2_score_txt = _clean(m2.get("score", ""))
 
-                # ✅ 점수 blank면 제외
-                if m1_score_raw == "" or m2_score_raw == "":
+                # ✅ M1/M2 점수 중 하나라도 blank면 제외
+                if m1_score_txt == "" or m2_score_txt == "":
                     skipped.append(stu)
                     prog.progress((i+1)/len(students))
                     continue
 
-                # ✅ 부제목: 검색 키워드 (Module1 우선, 없으면 Module2)
+                # ✅ 부제목: 검색 키워드 (M1 우선, 없으면 M2)
                 subtitle_kw = _clean(m1.get("keyword", "")) or _clean(m2.get("keyword", "")) or "-"
 
-                m1_meta = {"score": f"{m1_score_raw} / 22", "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
-                m2_meta = {"score": f"{m2_score_raw} / 22", "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
+                m1_meta = {"score": m1_score_txt, "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
+                m2_meta = {"score": m2_score_txt, "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
 
                 wrong1 = set(m1.get("wrong_set", set()))
                 wrong2 = set(m2.get("wrong_set", set()))
@@ -1219,3 +1230,4 @@ with tab3:
         except Exception as e:
             st.error(f"오류 발생: {e}")
             st.exception(e)
+
