@@ -481,19 +481,15 @@ with tab1:
     st.header("📦 파일 업로드")
 
     st.write("") 
-    st.markdown("#### 1. 문제 이미지 ZIP 파일")
+    st.markdown("####  1. 문제 이미지 ZIP 파일")
     st.caption("`m1`, `m2` 폴더가 들어있는 ZIP 파일을 업로드해주세요.")
-    # [중요] key 값을 추가해야 에러가 안 납니다.
-    img_zip = st.file_uploader("문제 ZIP 파일", type="zip", key="t1_zip") 
+    img_zip = st.file_uploader("", type="zip", key="t1_zip") 
 
     st.markdown("---") 
 
-    st.markdown("#### 2. 오답 현황 엑셀 파일")
+    st.markdown("####  2. 오답 현황 엑셀 파일")
     st.caption("학생들의 결과 데이터가 담긴 엑셀 파일을 업로드해주세요.")
-    excel_file = st.file_uploader("결과파일 엑셀", type="xlsx", key="t1_excel")
-
-    st.write("") # 버튼과의 여백
-
+    excel_file = st.file_uploader("", type="xlsx", key="t1_excel")
 
 
     
