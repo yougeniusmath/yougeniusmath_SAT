@@ -1079,9 +1079,11 @@ with tab3:
                     draw_text_center(c, ans_center, ry + base_1line, lines[0], "NanumGothic-Bold", fs, title_col)
                 else:
                     # ✅ 2줄 row는 “각 줄이 row 안에서 겹치지 않게” 확실히 띄움
-                    draw_text_center(c, ans_center, ry + row_h + base_2line_top, lines[0], "NanumGothic-Bold", fs, title_col)
-                    draw_text_center(c, ans_center, ry + row_h + base_2line_bottom, lines[1], "NanumGothic-Bold", fs, title_col)
+                    # 2줄일 때
+                    draw_text_center(c, ans_center, ry + row_h + 2.25*mm, lines[0], "NanumGothic-Bold", fs, title_col)
+                    draw_text_center(c, ans_center, ry + row_h + 0.90*mm, lines[1], "NanumGothic-Bold", fs, title_col)
 
+                    
                 # 다음 row로 이동
                 cur_y = cur_y - this_h - row_gap
 
