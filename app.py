@@ -459,16 +459,15 @@ with tab1:
     if 'zip_buffer' not in st.session_state:
         st.session_state.zip_buffer = None
 
-    st.markdown("---")
+   
     st.subheader("📊 예시 엑셀 양식")
-    
-    # [수정됨] 클릭하면 표가 열리고, 다운로드 버튼이 있는 기존 스타일로 복구
+        
     with st.expander("예시 엑셀파일 미리보기 (클릭하여 열기)"):
         st.dataframe(example_input_df(), use_container_width=True)
     
     example = get_example_excel()
     st.download_button(
-        "📥 예시 엑셀파일 다운로드 (Mock결과_양식.xlsx)", 
+        "📥 예시 엑셀파일 다운로드 (.xlsx)", 
         example, 
         file_name="Mock결과_양식.xlsx"
     )
@@ -482,14 +481,12 @@ with tab1:
 
     st.write("") 
     st.markdown("####  1. 문제 이미지 ZIP 파일")
-    st.caption("`m1`, `m2` 폴더가 들어있는 ZIP 파일을 업로드해주세요.")
-    img_zip = st.file_uploader("", type="zip", key="t1_zip") # 라벨을 위쪽 마크다운으로 대체하여 깔끔하게
-
-    st.markdown("---") # 구분선
+   st.caption("M1, M2 폴더 포함된 ZIP 파일 업로드")
+    img_zip = st.file_uploader("문제 ZIP 파일", type="zip")
 
     st.markdown("####  2. 오답 현황 엑셀 파일")
-    st.caption("학생들의 결과 데이터가 담긴 엑셀 파일을 업로드해주세요.")
-    excel_file = st.file_uploader("", type="xlsx", key="t1_excel")
+    st.caption("결과파일 업로드 (.xlsx) — 열 이름은 '이름', 'Module1', 'Module2'")
+    excel_file = st.file_uploader("결과파일 엑셀", type="xlsx")
 
     st.write("") # 버튼과의 여백
 
@@ -565,7 +562,7 @@ with tab1:
                 key="t1_down_all"
             )
 
-        st.subheader("👁️ 개별 PDF 다운로드")
+st.subheader("👁️ 개별 PDF 다운로드")
         student_names = [name for name, _ in st.session_state.generated_files]
         selected_student = st.selectbox("학생을 선택하세요", student_names, key="t1_select")
         
@@ -578,9 +575,9 @@ with tab1:
                     st.download_button(
                         f"📄 '{selected_student}' PDF 다운로드",
                         f,
-                        file_name=f"{selected_student}_오답노트.pdf",
+                        file_name=f"{selected_student}_{doc_title}.pdf",
                         key="t1_down_indiv"
-                    )
+                    ))
 
 # ---------------------------------------------------------
 # [Tab 2] PDF 문제 자르기
