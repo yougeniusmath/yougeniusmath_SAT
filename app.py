@@ -481,7 +481,7 @@ with tab1:
 
     st.write("") 
     st.markdown("####  1. 문제 이미지 ZIP 파일")
-   st.caption("M1, M2 폴더 포함된 ZIP 파일 업로드")
+    st.caption("M1, M2 폴더 포함된 ZIP 파일 업로드")
     img_zip = st.file_uploader("문제 ZIP 파일", type="zip")
 
     st.markdown("####  2. 오답 현황 엑셀 파일")
