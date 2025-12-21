@@ -910,47 +910,47 @@ with tab3:
         c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
         # ======= TOP / Generated =======
-L = 16*mm
-R = 16*mm
-TOP = H - 12*mm          # ✅ 윗여백 줄임 (기존 16mm)
-usable_w = W - L - R
+        L = 16*mm
+        R = 16*mm
+        TOP = H - 12*mm          # ✅ 윗여백 줄임 (기존 16mm)
+        usable_w = W - L - R
 
-c.setFont("NanumGothic", 9.5)
-c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
+        c.setFont("NanumGothic", 9.5)
+        c.setFillColor(colors.Color(100/255, 116/255, 139/255))
+        c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
-# ======= HEADER (one big card) =======
-header_h = 30*mm         # ✅ 제목 카드 높이 조금 줄임 (기존 34mm)
-header_y = TOP - 5*mm - header_h
+        # ======= HEADER (one big card) =======
+        header_h = 30*mm         # ✅ 제목 카드 높이 조금 줄임 (기존 34mm)
+        header_y = TOP - 5*mm - header_h
 
-draw_round_rect(c, L, header_y, usable_w, header_h, 9*mm, colors.white, stroke, 1)
+        draw_round_rect(c, L, header_y, usable_w, header_h, 9*mm, colors.white, stroke, 1)
 
-# Title / Subtitle
-c.setFillColor(title_col)
-c.setFont("NanumGothic-Bold", 25)
-c.drawString(L + 10*mm, header_y + header_h - 14*mm, title)
+        # Title / Subtitle
+        c.setFillColor(title_col)
+        c.setFont("NanumGothic-Bold", 25)
+        c.drawString(L + 10*mm, header_y + header_h - 14*mm, title)
 
-c.setFillColor(muted)
-c.setFont("NanumGothic", 13)  # ✅ 키워드 조금 크게
-c.drawString(L + 10*mm, header_y + header_h - 23*mm, subtitle)
+        c.setFillColor(muted)
+        c.setFont("NanumGothic", 13)  # ✅ 키워드 조금 크게
+        c.drawString(L + 10*mm, header_y + header_h - 23*mm, subtitle)
 
-# Name pill on the right inside same card
-pill_w = 62*mm           # ✅ Name 영역 고정폭(짤림 방지)
-pill_h = 16*mm
-pill_x = L + usable_w - pill_w - 10*mm
-pill_y = header_y + (header_h - pill_h)/2
+        # Name pill on the right inside same card
+        pill_w = 62*mm           # ✅ Name 영역 고정폭(짤림 방지)
+        pill_h = 16*mm
+        pill_x = L + usable_w - pill_w - 10*mm
+        pill_y = header_y + (header_h - pill_h)/2
 
-draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 7*mm, pill_fill, stroke, 1)
+        draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 7*mm, pill_fill, stroke, 1)
 
-c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-c.setFont("NanumGothic-Bold", 9.5)
-c.drawString(pill_x + 6*mm, pill_y + 9.8*mm, "Name")
+        c.setFillColor(colors.Color(100/255, 116/255, 139/255))
+        c.setFont("NanumGothic-Bold", 9.5)
+        c.drawString(pill_x + 6*mm, pill_y + 9.8*mm, "Name")
 
-c.setFillColor(colors.Color(2/255, 6/255, 23/255))
-max_name_w = pill_w - 22*mm
-name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 9.5, max_name_w)
-c.setFont("NanumGothic-Bold", name_fs)
-c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
+        c.setFillColor(colors.Color(2/255, 6/255, 23/255))
+        max_name_w = pill_w - 22*mm
+        name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 9.5, max_name_w)
+        c.setFont("NanumGothic-Bold", name_fs)
+        c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
 
 
         
