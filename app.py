@@ -666,14 +666,14 @@ with tab2:
                     st.error(f"오류 발생: {e}")
 
 
-
 # ---------------------------------------------------------
-# [Tab 3] 개인 성적표  (ReportLab 버전)
+# [Tab 3] 개인 성적표 (ReportLab, Student Analysis 고정 컬럼)
 # ---------------------------------------------------------
 with tab3:
     st.header("📊 개인 성적표")
     st.info("ETA.xlsx(Student Analysis) + Mock데이터.xlsx(정답) 기반으로 학생별 성적표 PDF 생성 → ZIP 다운로드")
 
+    # 업로드
     eta_file = st.file_uploader("ETA 결과 파일 업로드 (ETA.xlsx)", type=["xlsx"], key="t3_eta")
     mock_file = st.file_uploader("Mock 정답 파일 업로드 (Mock데이터.xlsx)", type=["xlsx"], key="t3_mock")
 
@@ -686,25 +686,44 @@ with tab3:
     subtitle = st.text_input("부제목(키워드)", value="25 S2 SAT MATH 만점반 Mock Test1", key="t3_subtitle")
 
     # =========================
-    # Helpers (Parsing)
+    # 고정 컬럼명 (ETA Student Analysis)
+    # =========================
+    HEADER_ROW_IDX = 1  # ✅ "2번째 행"이 헤더(엑셀 2행) -> pandas index 1
+
+    NAME_COL = "학생 이름"
+    M1_SCORE_COL = "[M1] 점수"
+    M2_SCORE_COL = "[M2] 점수"
+    M1_WRONG_COL = "[M1] 틀린 문제"
+    M2_WRONG_COL = "[M2] 틀린 문제"
+
+    # (있으면 쓰고, 없어도 '-' 처리)
+    M1_DT_COL = "[M1] Date/Time"
+    M2_DT_COL = "[M2] Date/Time"
+    M1_TIME_COL = "[M1] 걸린시간"
+    M2_TIME_COL = "[M2] 걸린시간"
+
+    # =========================
+    # Helpers
     # =========================
     def _clean(x):
-        if x is None or (isinstance(x, float) and pd.isna(x)):
-            return ""
+        if x is None: return ""
+        if isinstance(x, float) and pd.isna(x): return ""
         return str(x).replace("\r", "").strip()
 
     def _is_blank(x) -> bool:
         return _clean(x) == ""
 
     def parse_wrong_list(val):
-        if pd.isna(val): return set()
+        """'1,3,5' -> {1,3,5} / 'X' -> set()"""
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return set()
         s = str(val).strip()
         if s == "" or s.upper() in ["X", "Х", "-"]:
             return set()
         s = s.replace("，", ",").replace(";", ",")
         out=set()
         for p in re.split(r"[,\s]+", s):
-            p=p.strip()
+            p = p.strip()
             if not p: continue
             try:
                 out.add(int(p))
@@ -712,77 +731,29 @@ with tab3:
                 pass
         return out
 
-    def safe_find_col(df: pd.DataFrame, must_have=None, any_of=None):
-        """
-        must_have: list[str] - 모두 포함되어야 함
-        any_of: list[str] - 하나라도 포함되면 OK
-        """
-        if df is None or df.empty:
-            return None
-        cols = list(df.columns)
-        norm = {c: str(c).lower().replace(" ", "") for c in cols}
-
-        def ok(cn):
-            if must_have:
-                for t in must_have:
-                    if t.lower().replace(" ", "") not in cn:
-                        return False
-            if any_of:
-                return any(t.lower().replace(" ", "") in cn for t in any_of)
-            return True
-
-        for c in cols:
-            if ok(norm[c]):
-                return c
-        return None
-
-    def find_module_score_cols(student_df: pd.DataFrame):
-        """
-        Student Analysis에서 M1/M2 점수 컬럼을 최대한 유연하게 찾는다.
-        """
-        # M1 점수
-        m1_score_col = safe_find_col(student_df, must_have=["m1"], any_of=["score", "점수"])
-        if m1_score_col is None:
-            m1_score_col = safe_find_col(student_df, must_have=["module1"], any_of=["score", "점수"])
-        if m1_score_col is None:
-            m1_score_col = safe_find_col(student_df, must_have=["모듈1"], any_of=["score", "점수"])
-
-        # M2 점수
-        m2_score_col = safe_find_col(student_df, must_have=["m2"], any_of=["score", "점수"])
-        if m2_score_col is None:
-            m2_score_col = safe_find_col(student_df, must_have=["module2"], any_of=["score", "점수"])
-        if m2_score_col is None:
-            m2_score_col = safe_find_col(student_df, must_have=["모듈2"], any_of=["score", "점수"])
-
-        return m1_score_col, m2_score_col
-
-    def find_module_meta_cols(student_df: pd.DataFrame):
-        """
-        Student Analysis에서 (가능하면) DateTime/Time/Wrong 컬럼도 찾는다.
-        없으면 '-' 처리.
-        """
-        def pick(mod_tag, any_of):
-            # 예: mod_tag="m1", any_of=["date","응답","datetime"]
-            c = safe_find_col(student_df, must_have=[mod_tag], any_of=any_of)
-            if c is None and mod_tag.startswith("m"):
-                c = safe_find_col(student_df, must_have=[f"module{mod_tag[-1]}"], any_of=any_of)
-            if c is None and mod_tag.startswith("m"):
-                c = safe_find_col(student_df, must_have=[f"모듈{mod_tag[-1]}"], any_of=any_of)
-            return c
-
-        m1_dt = pick("m1", ["date", "datetime", "응답", "시간"])
-        m2_dt = pick("m2", ["date", "datetime", "응답", "시간"])
-        m1_time = pick("m1", ["time", "duration", "소요"])
-        m2_time = pick("m2", ["time", "duration", "소요"])
-        m1_wrong = pick("m1", ["wrong", "오답", "틀린"])
-        m2_wrong = pick("m2", ["wrong", "오답", "틀린"])
-        return m1_dt, m2_dt, m1_time, m2_time, m1_wrong, m2_wrong
+    def wr_to_text(v):
+        """0%면 '-'"""
+        if v is None:
+            return "-"
+        try:
+            v = float(v)
+            if abs(v) < 1e-12:
+                return "-"
+            return f"{int(round(v*100))}%"
+        except:
+            return "-"
 
     def build_wrong_rate_dict(error_df: pd.DataFrame):
+        """
+        ETA의 Error Analysis 시트에서 문항별 오답률 dict 생성.
+        (시트 구조는 기존 코드 방식: M2 마커로 분리)
+        """
         if error_df is None or error_df.empty:
             return {}, {}
 
         col_q = error_df.columns[0]
+
+        # 오답률 컬럼 찾기: '오답' or 'wrong' 포함, 없으면 3번째 컬럼 fallback
         wr_col = None
         for c in error_df.columns:
             cs = str(c).lower()
@@ -798,7 +769,7 @@ with tab3:
         m2_start = m2_idxs[0]
 
         m1_rows = error_df.iloc[1:m2_start]
-        m2_rows = error_df.iloc[m2_start+1:m2_start+23]
+        m2_rows = error_df.iloc[m2_start+1:m2_start+23]  # 22문항
 
         def rows_to_dict(rows):
             dct={}
@@ -817,30 +788,22 @@ with tab3:
 
         return rows_to_dict(m1_rows), rows_to_dict(m2_rows)
 
-    def wr_to_text(v):
-        if v is None:
-            return "-"
-        try:
-            v = float(v)
-            if abs(v) < 1e-12:
-                return "-"  # 0% -> '-'
-            return f"{int(round(v*100))}%"
-        except:
-            return "-"
-
     def read_mock_answers(mock_bytes) -> tuple[dict, dict]:
+        """
+        Mock데이터.xlsx 정답을 "셀 그대로" 읽음(줄바꿈 유지).
+        canonical(모듈/문항번호/정답) 우선.
+        """
         df = pd.read_excel(mock_bytes)
         cols = set(df.columns.astype(str))
 
-        # canonical
         if {"모듈", "문항번호", "정답"}.issubset(cols):
             m1 = df[df["모듈"].astype(str).str.upper().eq("M1")].set_index("문항번호")["정답"].astype(str).to_dict()
             m2 = df[df["모듈"].astype(str).str.upper().eq("M2")].set_index("문항번호")["정답"].astype(str).to_dict()
-            m1 = {int(k): _clean(v).replace("\r", "") for k, v in m1.items() if str(k).strip().isdigit()}
-            m2 = {int(k): _clean(v).replace("\r", "") for k, v in m2.items() if str(k).strip().isdigit()}
+            m1 = {int(k): _clean(v) for k, v in m1.items() if str(k).strip().isdigit()}
+            m2 = {int(k): _clean(v) for k, v in m2.items() if str(k).strip().isdigit()}
             return m1, m2
 
-        # marker
+        # fallback: marker 방식
         c0, c1 = df.columns[0], df.columns[1]
         m2_idxs = df.index[df[c0].astype(str).str.contains("Module2", case=False, na=False)].tolist()
         if not m2_idxs:
@@ -850,7 +813,7 @@ with tab3:
                     q = int(str(r[c0]).strip())
                 except:
                     continue
-                out[q] = _clean(r[c1]).replace("\r", "")
+                out[q] = _clean(r[c1])
             return out, {}
 
         m2i = m2_idxs[0]
@@ -864,14 +827,16 @@ with tab3:
                     q = int(str(r[c0]).strip())
                 except:
                     continue
-                dct[q] = _clean(r[c1]).replace("\r", "")
+                dct[q] = _clean(r[c1])
             return dct
 
         return rows_to_ans(m1_rows), rows_to_ans(m2_rows)
 
     # =========================
-    # ReportLab PDF rendering
+    # ReportLab (둥근 카드 + 자동 축소)
     # =========================
+    # ⚠️ Streamlit Cloud면 requirements.txt에 reportlab 추가 필요:
+    # reportlab
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -880,7 +845,6 @@ with tab3:
     from reportlab.pdfbase.ttfonts import TTFont
 
     def ensure_fonts_registered():
-        # NanumGothic 등록 (한글)
         pdfmetrics.registerFont(TTFont("NanumGothic", FONT_REGULAR))
         pdfmetrics.registerFont(TTFont("NanumGothic-Bold", FONT_BOLD))
 
@@ -888,7 +852,6 @@ with tab3:
         return pdfmetrics.stringWidth(text, font_name, font_size)
 
     def fit_font_size(text, font_name, max_size, min_size, max_width):
-        """한 줄 문자열이 max_width 안에 들어가도록 폰트 크기 축소"""
         s = max_size
         while s >= min_size:
             if str_w(text, font_name, s) <= max_width:
@@ -897,12 +860,10 @@ with tab3:
         return min_size
 
     def fit_font_size_two_lines(lines, font_name, max_size, min_size, max_width):
-        """두 줄 모두 같은 폰트 크기로, 둘 다 폭 제한 만족하도록"""
-        if not lines:
-            return max_size
         need = max_size
         for ln in lines:
-            if ln.strip() == "":
+            ln = ln.strip()
+            if ln == "":
                 continue
             need = min(need, fit_font_size(ln, font_name, max_size, min_size, max_width))
         return need
@@ -961,8 +922,7 @@ with tab3:
         # Generated (top-right)
         c.setFont("NanumGothic", 9.5)
         c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-        gen_text = f"Generated: {gen_date_str}"
-        c.drawRightString(W - R, TOP, gen_text)
+        c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
         # Header card
         header_h = 42*mm
@@ -988,7 +948,6 @@ with tab3:
         c.setFont("NanumGothic-Bold", 9.5)
         c.drawString(pill_x + 6*mm, pill_y + 11*mm, "Name")
 
-        # name RIGHT aligned
         c.setFillColor(colors.Color(2/255, 6/255, 23/255))
         c.setFont("NanumGothic-Bold", 15)
         c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.8*mm, student_name)
@@ -1014,20 +973,19 @@ with tab3:
             c.drawString(x + 7*mm, y + 5.5*mm, f"Date/Time  {dt}")
             c.drawRightString(x + kpi_w - 7*mm, y + 5.5*mm, f"Time  {t}")
 
-        draw_kpi_card(L, kpi_y, "Module 1", m1_meta.get("score","-"), m1_meta.get("dt","-"), m1_meta.get("time","-"))
-        draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta.get("score","-"), m2_meta.get("dt","-"), m2_meta.get("time","-"))
+        draw_kpi_card(L, kpi_y, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
+        draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
         # Section
         sec_y = kpi_y - 10*mm
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 14)
         c.drawString(L, sec_y, "문항별 분석")
-
         c.setStrokeColor(stroke)
         c.setLineWidth(1.5)
         c.line(L, sec_y - 4*mm, W - R, sec_y - 4*mm)
 
-        # Analysis cards (two columns)
+        # Analysis cards
         cards_top = sec_y - 10*mm
         card_h = 120*mm
         card_w = (usable_w - gap) / 2
@@ -1038,7 +996,6 @@ with tab3:
         def draw_analysis_card(x, y, title_txt, ans_dict, wr_dict, wrong_set):
             draw_round_rect(c, x, y, card_w, card_h, 10*mm, colors.white, stroke, 1)
 
-            # Title
             c.setFillColor(title_col)
             c.setFont("NanumGothic-Bold", 15)
             c.drawString(x + 9*mm, y + card_h - 14*mm, title_txt)
@@ -1048,7 +1005,6 @@ with tab3:
             strip_y = y + card_h - 28*mm
             draw_round_rect(c, x + 7*mm, strip_y, card_w - 14*mm, strip_h, 6*mm, pill_fill, stroke, 1)
 
-            # column layout
             inner_x = x + 9*mm
             inner_w = card_w - 18*mm
             col_q = 12*mm
@@ -1056,70 +1012,52 @@ with tab3:
             col_ox = 12*mm
             col_ans = inner_w - (col_q + col_wr + col_ox)
 
-            # centers (for header)
             q_center = inner_x + col_q/2
             ans_center = inner_x + col_q + col_ans/2
             wr_center = inner_x + col_q + col_ans + col_wr/2
             ox_center = inner_x + col_q + col_ans + col_wr + col_ox/2
 
-            # header text CENTER in each column
             header_y = strip_y + 3.5*mm
-            c.setFillColor(muted)
-            c.setFont("NanumGothic-Bold", 10.5)
             draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 10.5, muted)
             draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 10.5, muted)
             draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 10.5, muted)
             draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 10.5, muted)
 
-            # rows
             row_h = 9.5*mm
             start_y = strip_y - 3*mm - row_h
             for i, q in enumerate(range(1, 23)):
                 ry = start_y - i*(row_h + 1.6*mm)
-                if ry < y + 8*mm:
-                    break
 
-                # row pill bg
                 fill = stripe if (q % 2 == 0) else colors.white
-                # outline 없는 pill 느낌
                 c.setFillColor(fill)
                 c.setStrokeColor(fill)
                 c.roundRect(x + 7*mm, ry, card_w - 14*mm, row_h, 6*mm, fill=1, stroke=0)
 
-                # values
                 ans_raw = _clean(ans_dict.get(q, ""))
                 lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
                 lines = [ln.strip() for ln in lines if ln.strip() != ""]
-                if not lines:
-                    lines = [""]
+                if not lines: lines = [""]
                 if len(lines) > 2:
-                    # 2줄까지만: 나머지는 2번째 줄에 합치기
                     lines = [lines[0], " ".join(lines[1:])]
 
                 wr_txt = wr_to_text(wr_dict.get(q, None))
                 ox = "X" if q in wrong_set else "O"
 
-                # Q
-                c.setFillColor(title_col)
-                c.setFont("NanumGothic", 11.5)
                 draw_text_center(c, q_center, ry + 3.0*mm, str(q), "NanumGothic", 11.5, title_col)
 
-                # Answer (CENTER, auto shrink, two lines same font size)
                 ans_max_w = col_ans - 4*mm
-                base_size = 11.5
-                min_size = 7.0
-                fsize = fit_font_size_two_lines(lines, "NanumGothic-Bold", base_size, min_size, ans_max_w)
-                # vertical placement
-                if len(lines) == 1:
-                    draw_text_center(c, ans_center, ry + 3.0*mm, lines[0], "NanumGothic-Bold", fsize, title_col)
-                else:
-                    draw_text_center(c, ans_center, ry + 4.2*mm, lines[0], "NanumGothic-Bold", fsize, title_col)
-                    draw_text_center(c, ans_center, ry + 1.4*mm, lines[1], "NanumGothic-Bold", fsize, title_col)
+                base = 11.5
+                min_s = 7.0
+                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", base, min_s, ans_max_w)
 
-                # Wrong rate (CENTER)
+                if len(lines) == 1:
+                    draw_text_center(c, ans_center, ry + 3.0*mm, lines[0], "NanumGothic-Bold", fs, title_col)
+                else:
+                    draw_text_center(c, ans_center, ry + 4.2*mm, lines[0], "NanumGothic-Bold", fs, title_col)
+                    draw_text_center(c, ans_center, ry + 1.4*mm, lines[1], "NanumGothic-Bold", fs, title_col)
+
                 draw_text_center(c, wr_center, ry + 3.0*mm, wr_txt, "NanumGothic", 11.5, title_col)
 
-                # O/X (text only, CENTER)
                 ox_color = red if ox == "X" else green
                 draw_text_center(c, ox_center, ry + 3.0*mm, ox, "NanumGothic-Bold", 11.5, ox_color)
 
@@ -1131,7 +1069,7 @@ with tab3:
         return output_path
 
     # =========================
-    # Main action
+    # Run
     # =========================
     if st.button("🚀 개인 성적표 생성", type="primary", key="t3_btn"):
         if not eta_file or not mock_file:
@@ -1143,38 +1081,40 @@ with tab3:
             st.stop()
 
         try:
-            # 1) Load ETA
+            # ETA load
             eta_xl = pd.ExcelFile(eta_file)
             if "Student Analysis" not in eta_xl.sheet_names:
-                st.error("⚠️ ETA.xlsx에 'Student Analysis' 시트가 없습니다. (학생 목록은 Student Analysis 기준 ONLY)")
+                st.error("⚠️ ETA.xlsx에 'Student Analysis' 시트가 없습니다.")
                 st.stop()
 
-            student_df = pd.read_excel(eta_xl, sheet_name="Student Analysis")
-            error_df_ = pd.read_excel(eta_xl, sheet_name="Error Analysis") if "Error Analysis" in eta_xl.sheet_names else None
-
-            # 2) Student list from Student Analysis only
-            name_col = safe_find_col(student_df, any_of=["학생", "이름", "name", "student"])
-            if name_col is None:
-                st.error("⚠️ Student Analysis에서 학생 이름 컬럼을 찾지 못했습니다.")
+            raw_sa = pd.read_excel(eta_xl, sheet_name="Student Analysis", header=None)
+            if raw_sa.shape[0] <= HEADER_ROW_IDX:
+                st.error("⚠️ Student Analysis 시트가 너무 짧아서 헤더 행(2번째 행)을 찾을 수 없습니다.")
                 st.stop()
 
-            m1_score_col, m2_score_col = find_module_score_cols(student_df)
-            if m1_score_col is None or m2_score_col is None:
-                st.error("⚠️ Student Analysis에서 M1/M2 점수 컬럼을 찾지 못했습니다. (컬럼명에 M1/M2 + 점수/score 포함 필요)")
+            header = raw_sa.iloc[HEADER_ROW_IDX].astype(str).tolist()
+            student_df = raw_sa.iloc[HEADER_ROW_IDX + 1:].copy()
+            student_df.columns = header
+            student_df = student_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
+
+            # 필수 컬럼 검증
+            required = [NAME_COL, M1_SCORE_COL, M2_SCORE_COL, M1_WRONG_COL, M2_WRONG_COL]
+            missing = [c for c in required if c not in student_df.columns]
+            if missing:
+                st.error(f"⚠️ Student Analysis 필수 컬럼 누락: {missing}")
                 st.stop()
 
-            m1_dt_col, m2_dt_col, m1_time_col, m2_time_col, m1_wrong_col, m2_wrong_col = find_module_meta_cols(student_df)
+            # Error Analysis (오답률)
+            error_df = pd.read_excel(eta_xl, sheet_name="Error Analysis") if "Error Analysis" in eta_xl.sheet_names else None
+            wr1, wr2 = build_wrong_rate_dict(error_df) if error_df is not None else ({}, {})
 
-            # 3) Wrong-rate dicts
-            wr1, wr2 = build_wrong_rate_dict(error_df_) if error_df_ is not None else ({}, {})
-
-            # 4) Mock answers
+            # Mock answers
             ans1, ans2 = read_mock_answers(mock_file)
 
-            # 5) Build students + skip blanks (둘 중 하나라도 blank면 제외)
-            students_all = [_clean(x) for x in student_df[name_col].dropna().tolist()]
-            students_all = [s for s in students_all if s != ""]
-            if not students_all:
+            # 학생 목록은 Student Analysis ONLY
+            students = [_clean(x) for x in student_df[NAME_COL].dropna().tolist()]
+            students = [s for s in students if s != ""]
+            if not students:
                 st.error("학생 목록이 비어있습니다.")
                 st.stop()
 
@@ -1182,33 +1122,36 @@ with tab3:
             os.makedirs(output_dir, exist_ok=True)
 
             made_files = []
-            skipped = []  # excluded due to blank scores
+            skipped = []
             prog = st.progress(0)
 
-            for i, stu in enumerate(students_all):
-                row = student_df[student_df[name_col].astype(str).str.strip().eq(stu)].head(1)
+            for i, stu in enumerate(students):
+                row = student_df[student_df[NAME_COL].astype(str).str.strip().eq(stu)].head(1)
                 if row.empty:
-                    prog.progress((i+1)/len(students_all))
+                    prog.progress((i+1)/len(students))
                     continue
                 rr = row.iloc[0]
 
-                m1_score = _clean(rr.get(m1_score_col, ""))
-                m2_score = _clean(rr.get(m2_score_col, ""))
+                m1_score = _clean(rr.get(M1_SCORE_COL, ""))
+                m2_score = _clean(rr.get(M2_SCORE_COL, ""))
 
+                # ✅ 점수 blank면 제외
                 if m1_score == "" or m2_score == "":
                     skipped.append(stu)
-                    prog.progress((i+1)/len(students_all))
+                    prog.progress((i+1)/len(students))
                     continue
 
-                m1_dt = "-" if (m1_dt_col is None) else _clean(rr.get(m1_dt_col, "-"))
-                m2_dt = "-" if (m2_dt_col is None) else _clean(rr.get(m2_dt_col, "-"))
-                m1_time = "-" if (m1_time_col is None) else _clean(rr.get(m1_time_col, "-"))
-                m2_time = "-" if (m2_time_col is None) else _clean(rr.get(m2_time_col, "-"))
-                wrong1 = set() if (m1_wrong_col is None) else parse_wrong_list(rr.get(m1_wrong_col, ""))
-                wrong2 = set() if (m2_wrong_col is None) else parse_wrong_list(rr.get(m2_wrong_col, ""))
+                wrong1 = parse_wrong_list(rr.get(M1_WRONG_COL, ""))
+                wrong2 = parse_wrong_list(rr.get(M2_WRONG_COL, ""))
 
-                m1_meta = {"score": m1_score, "dt": m1_dt or "-", "time": m1_time or "-"}
-                m2_meta = {"score": m2_score, "dt": m2_dt or "-", "time": m2_time or "-"}
+                # Date/Time, 걸린시간은 있으면 표시, 없으면 '-'
+                m1_dt = _clean(rr.get(M1_DT_COL, "-")) if (M1_DT_COL in student_df.columns) else "-"
+                m2_dt = _clean(rr.get(M2_DT_COL, "-")) if (M2_DT_COL in student_df.columns) else "-"
+                m1_time = _clean(rr.get(M1_TIME_COL, "-")) if (M1_TIME_COL in student_df.columns) else "-"
+                m2_time = _clean(rr.get(M2_TIME_COL, "-")) if (M2_TIME_COL in student_df.columns) else "-"
+
+                m1_meta = {"score": m1_score, "dt": (m1_dt or "-"), "time": (m1_time or "-")}
+                m2_meta = {"score": m2_score, "dt": (m2_dt or "-"), "time": (m2_time or "-")}
 
                 pdf_path = os.path.join(output_dir, f"{stu}_{generated_date.strftime('%Y%m%d')}.pdf")
 
@@ -1229,13 +1172,12 @@ with tab3:
                 )
 
                 made_files.append((stu, pdf_path))
-                prog.progress((i+1)/len(students_all))
+                prog.progress((i+1)/len(students))
 
-            # 6) ZIP
             if not made_files:
                 st.warning("생성된 PDF가 없습니다. (M1/M2 점수 blank로 모두 제외되었을 수 있어요)")
                 if skipped:
-                    with st.expander(f"제외된 학생 ({len(skipped)}명)"):
+                    with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
                         for s in skipped:
                             st.write(f"- {s}")
                 st.stop()
@@ -1249,7 +1191,7 @@ with tab3:
 
             st.success(f"✅ 생성 완료: {len(made_files)}명 (제외: {len(skipped)}명)")
             if skipped:
-                with st.expander(f"제외된 학생 ({len(skipped)}명) - M1/M2 점수 blank"):
+                with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
                     for s in skipped:
                         st.write(f"- {s}")
 
@@ -1261,7 +1203,6 @@ with tab3:
                 key="t3_download_zip"
             )
 
-            # 개별 다운로드
             st.subheader("👁️ 개별 PDF 다운로드")
             student_names = [n for n, _ in made_files]
             selected = st.selectbox("학생 선택", student_names, key="t3_pick")
@@ -1277,5 +1218,11 @@ with tab3:
                             key="t3_down_one"
                         )
 
+        except ModuleNotFoundError as e:
+            # reportlab 미설치
+            st.error("❌ reportlab이 설치되어 있지 않습니다. Streamlit Cloud라면 requirements.txt에 'reportlab'을 추가해주세요.")
+            st.exception(e)
+
         except Exception as e:
             st.error(f"오류 발생: {e}")
+            st.exception(e)
