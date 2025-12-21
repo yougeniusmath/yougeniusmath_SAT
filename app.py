@@ -909,63 +909,76 @@ with tab3:
         c.setFillColor(colors.Color(100/255, 116/255, 139/255))
         c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
-        # Header: left title card + right name card
-        header_h = 34*mm
-        header_y = TOP - 7*mm - header_h
-        gap_h = 6*mm
-        left_w = usable_w * 0.62
-        right_w = usable_w - left_w - gap_h
+        # ======= TOP / Generated =======
+L = 16*mm
+R = 16*mm
+TOP = H - 12*mm          # ✅ 윗여백 줄임 (기존 16mm)
+usable_w = W - L - R
 
-        draw_round_rect(c, L, header_y, left_w, header_h, 9*mm, colors.white, stroke, 1)
-        c.setFillColor(title_col)
-        c.setFont("NanumGothic-Bold", 25)
-        c.drawString(L + 9*mm, header_y + header_h - 15*mm, title)
+c.setFont("NanumGothic", 9.5)
+c.setFillColor(colors.Color(100/255, 116/255, 139/255))
+c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
-        c.setFillColor(muted)
-        c.setFont("NanumGothic", 12.5)
-        c.drawString(L + 9*mm, header_y + header_h - 24*mm, subtitle)
+# ======= HEADER (one big card) =======
+header_h = 30*mm         # ✅ 제목 카드 높이 조금 줄임 (기존 34mm)
+header_y = TOP - 5*mm - header_h
 
-        name_x = L + left_w + gap_h
-        draw_round_rect(c, name_x, header_y, right_w, header_h, 9*mm, colors.white, stroke, 1)
+draw_round_rect(c, L, header_y, usable_w, header_h, 9*mm, colors.white, stroke, 1)
 
-        pill_pad = 8*mm
-        pill_x = name_x + pill_pad
-        pill_w = right_w - 2*pill_pad
-        pill_h = 16*mm
-        pill_y = header_y + (header_h - pill_h)/2
-        draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 7*mm, pill_fill, stroke, 1)
+# Title / Subtitle
+c.setFillColor(title_col)
+c.setFont("NanumGothic-Bold", 25)
+c.drawString(L + 10*mm, header_y + header_h - 14*mm, title)
 
-        c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-        c.setFont("NanumGothic-Bold", 9.5)
-        c.drawString(pill_x + 5*mm, pill_y + 9.8*mm, "Name")
+c.setFillColor(muted)
+c.setFont("NanumGothic", 13)  # ✅ 키워드 조금 크게
+c.drawString(L + 10*mm, header_y + header_h - 23*mm, subtitle)
 
-        c.setFillColor(colors.Color(2/255, 6/255, 23/255))
-        max_name_w = pill_w - 18*mm
-        name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 9.5, max_name_w)
-        c.setFont("NanumGothic-Bold", name_fs)
-        c.drawRightString(pill_x + pill_w - 5*mm, pill_y + 4.2*mm, student_name)
+# Name pill on the right inside same card
+pill_w = 62*mm           # ✅ Name 영역 고정폭(짤림 방지)
+pill_h = 16*mm
+pill_x = L + usable_w - pill_w - 10*mm
+pill_y = header_y + (header_h - pill_h)/2
 
+draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 7*mm, pill_fill, stroke, 1)
+
+c.setFillColor(colors.Color(100/255, 116/255, 139/255))
+c.setFont("NanumGothic-Bold", 9.5)
+c.drawString(pill_x + 6*mm, pill_y + 9.8*mm, "Name")
+
+c.setFillColor(colors.Color(2/255, 6/255, 23/255))
+max_name_w = pill_w - 22*mm
+name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 9.5, max_name_w)
+c.setFont("NanumGothic-Bold", name_fs)
+c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
+
+
+        
         # KPI (score는 "xx / 22" 그대로 표시)
         kpi_h = 21*mm
         gap = 5*mm
         kpi_w = (usable_w - gap) / 2
         kpi_y = header_y - 6*mm - kpi_h
 
-        def draw_kpi_card(x, y, label, score_txt, dt, t):
-            draw_round_rect(c, x, y, kpi_w, kpi_h, 8*mm, colors.white, stroke, 1)
+def draw_kpi_card(x, y, label, score_txt, dt, t):
+    draw_round_rect(c, x, y, kpi_w, kpi_h, 8*mm, colors.white, stroke, 1)
 
-            c.setFillColor(colors.Color(2/255, 6/255, 23/255))
-            c.setFont("NanumGothic-Bold", 11.5)
-            c.drawString(x + 6*mm, y + kpi_h - 8.2*mm, label)
+    # Module label
+    c.setFillColor(colors.Color(2/255, 6/255, 23/255))
+    c.setFont("NanumGothic-Bold", 11.5)
+    c.drawString(x + 6*mm, y + kpi_h - 8.2*mm, label)
 
-            c.setFont("NanumGothic-Bold", 18)
-            c.setFillColor(title_col)
-            c.drawRightString(x + kpi_w - 6*mm, y + kpi_h - 14.0*mm, str(score_txt))
+    # ✅ Score 위로 올림
+    c.setFont("NanumGothic-Bold", 18)
+    c.setFillColor(title_col)
+    c.drawRightString(x + kpi_w - 6*mm, y + kpi_h - 12.6*mm, str(score_txt))
 
-            c.setFont("NanumGothic", 9)
-            c.setFillColor(muted)
-            c.drawString(x + 6*mm, y + 4.2*mm, f"Date/Time  {dt}")
-            c.drawRightString(x + kpi_w - 6*mm, y + 4.2*mm, f"Time  {t}")
+    # ✅ 라벨(Date/Time, Time) 제거하고 값만
+    c.setFont("NanumGothic", 9)
+    c.setFillColor(muted)
+    c.drawString(x + 6*mm, y + 3.8*mm, f"{dt}")
+    c.drawRightString(x + kpi_w - 6*mm, y + 3.8*mm, f"{t}")
+
 
         draw_kpi_card(L, kpi_y, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
         draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
@@ -975,12 +988,9 @@ with tab3:
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 13.5)
         c.drawString(L, sec_y, "문항별 분석")
-        c.setStrokeColor(stroke)
-        c.setLineWidth(1.5)
-        c.line(L, sec_y - 4*mm, W - R, sec_y - 4*mm)
 
         # Analysis cards
-        cards_top = sec_y - 7*mm
+        cards_top = sec_y - 5*mm
         card_h = 110*mm
         card_w = (usable_w - gap) / 2
         left_x = L
@@ -994,8 +1004,8 @@ with tab3:
             c.setFont("NanumGothic-Bold", 14.5)
             c.drawString(x + 8*mm, y + card_h - 13*mm, title_txt)
 
-            strip_h = 11*mm
-            strip_y = y + card_h - 26*mm
+            strip_h = 9.0*mm
+            strip_y = y + card_h - 23.5*mm
             draw_round_rect(c, x + 6*mm, strip_y, card_w - 12*mm, strip_h, 6*mm, pill_fill, stroke, 1)
 
             inner_x = x + 8*mm
@@ -1011,7 +1021,7 @@ with tab3:
             wr_center = inner_x + col_q + col_ans + col_wr/2
             ox_center = inner_x + col_q + col_ans + col_wr + col_ox/2
 
-            header_y = strip_y + 3.2*mm
+            header_y = strip_y + 2.6*mm
             draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 10.2, muted)
             draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 10.2, muted)
             draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 10.2, muted)
