@@ -665,7 +665,6 @@ with tab2:
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
 
-
 # ---------------------------------------------------------
 # [Tab 3] 개인 성적표 (Student Analysis 학생목록 + QuizResults 메타 + Mock/오답률)
 # ---------------------------------------------------------
@@ -685,7 +684,7 @@ with tab3:
     st.caption("부제목은 QuizResults의 '검색 키워드'가 학생별로 자동으로 들어갑니다.")
 
     # =========================
-    # 시트/헤더 규칙 (ETA(1).xlsx 실물 기준)
+    # 시트/헤더 규칙 (ETA(1).xlsx 기준)
     # =========================
     STUDENT_SHEET = "Student Analysis"
     QUIZ_SHEET = "QuizResults"
@@ -694,14 +693,13 @@ with tab3:
     SA_HEADER_ROW_IDX = 1  # ✅ Student Analysis: 2행이 헤더
     QZ_HEADER_ROW_IDX = 0  # ✅ QuizResults: 1행이 헤더
 
-    # Student Analysis: 학생목록은 무조건 여기서만
+    # Student Analysis: 학생목록 ONLY
     SA_NAME_COL = "학생 이름"
     SA_M1_SCORE_COL = "[M1] 점수"
     SA_M2_SCORE_COL = "[M2] 점수"
 
-    # QuizResults: 메타는 여기서만 (너가 준 고정 컬럼명 = 실제 파일과 일치)
+    # QuizResults: 메타 ONLY (고정 컬럼명)
     QZ_KEYWORD_COL = "검색 키워드"
-    QZ_SUBJECT_COL = "메일 제목"
     QZ_MODULE_COL  = "모듈"
     QZ_NAME_COL    = "학생 이름"
     QZ_DT_COL      = "응답 날짜"
@@ -747,11 +745,7 @@ with tab3:
             return "-"
 
     def score_to_slash22(s):
-        """
-        QuizResults '점수'가 이미 '19 / 22' 형태로 들어오기도 함.
-        - 이미 '/' 있으면 그대로
-        - 아니면 '점수 / 22'
-        """
+        """QuizResults 점수가 이미 '19 / 22'면 그대로, 아니면 '점수 / 22'"""
         s = _clean(s)
         if s == "":
             return ""
@@ -833,8 +827,15 @@ with tab3:
     from reportlab.pdfbase.ttfonts import TTFont
 
     def ensure_fonts_registered():
-        pdfmetrics.registerFont(TTFont("NanumGothic", FONT_REGULAR))
-        pdfmetrics.registerFont(TTFont("NanumGothic-Bold", FONT_BOLD))
+        # 중복 등록되어도 크게 문제 없게 try 처리
+        try:
+            pdfmetrics.registerFont(TTFont("NanumGothic", FONT_REGULAR))
+        except:
+            pass
+        try:
+            pdfmetrics.registerFont(TTFont("NanumGothic-Bold", FONT_BOLD))
+        except:
+            pass
 
     def str_w(text, font_name, font_size):
         return pdfmetrics.stringWidth(text, font_name, font_size)
@@ -896,12 +897,13 @@ with tab3:
         green = colors.Color(22/255, 101/255, 52/255)
         red = colors.Color(153/255, 27/255, 27/255)
 
+        # background
         c.setFillColor(bg)
         c.rect(0, 0, W, H, stroke=0, fill=1)
 
         L = 16*mm
         R = 16*mm
-        TOP = H - 16*mm
+        TOP = H - 12*mm          # ✅ 윗여백 줄임
         usable_w = W - L - R
 
         # Generated
@@ -909,37 +911,23 @@ with tab3:
         c.setFillColor(colors.Color(100/255, 116/255, 139/255))
         c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
-        # ======= TOP / Generated =======
-        L = 16*mm
-        R = 16*mm
-        TOP = H - 12*mm          # ✅ 윗여백 줄임 (기존 16mm)
-        usable_w = W - L - R
-
-        c.setFont("NanumGothic", 9.5)
-        c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-        c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
-
-        # ======= HEADER (one big card) =======
-        header_h = 30*mm         # ✅ 제목 카드 높이 조금 줄임 (기존 34mm)
+        # ===== Header (one big card) =====
+        header_h = 30*mm
         header_y = TOP - 5*mm - header_h
-
         draw_round_rect(c, L, header_y, usable_w, header_h, 9*mm, colors.white, stroke, 1)
 
-        # Title / Subtitle
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 25)
         c.drawString(L + 10*mm, header_y + header_h - 14*mm, title)
 
         c.setFillColor(muted)
-        c.setFont("NanumGothic", 13)  # ✅ 키워드 조금 크게
+        c.setFont("NanumGothic", 13)
         c.drawString(L + 10*mm, header_y + header_h - 23*mm, subtitle)
 
-        # Name pill on the right inside same card
-        pill_w = 62*mm           # ✅ Name 영역 고정폭(짤림 방지)
+        pill_w = 62*mm
         pill_h = 16*mm
         pill_x = L + usable_w - pill_w - 10*mm
         pill_y = header_y + (header_h - pill_h)/2
-
         draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 7*mm, pill_fill, stroke, 1)
 
         c.setFillColor(colors.Color(100/255, 116/255, 139/255))
@@ -952,46 +940,43 @@ with tab3:
         c.setFont("NanumGothic-Bold", name_fs)
         c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
 
-
-        
         # ===== KPI =====
         kpi_h = 21 * mm
         gap = 5 * mm
         kpi_w = (usable_w - gap) / 2
-        kpi_y = header_y - 6 * mm - kpi_h
+        kpi_y = header_y - 5 * mm - kpi_h  # ✅ 간격 줄임
 
         def draw_kpi_card(x, y, label, score_txt, dt, t):
             draw_round_rect(c, x, y, kpi_w, kpi_h, 8 * mm, colors.white, stroke, 1)
 
-            # Module label
             c.setFillColor(colors.Color(2/255, 6/255, 23/255))
             c.setFont("NanumGothic-Bold", 11.5)
             c.drawString(x + 6 * mm, y + kpi_h - 8.2 * mm, label)
 
-            # Score (위로 올림)
+            # ✅ 점수 더 위로
             c.setFont("NanumGothic-Bold", 18)
             c.setFillColor(title_col)
-            c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 11.7 * mm, str(score_txt))
+            c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 11.4 * mm, str(score_txt))
 
-            # Date/Time, Time 라벨 제거 -> 값만 출력
+            # ✅ 라벨 제거 -> 값만
             c.setFont("NanumGothic", 9)
             c.setFillColor(muted)
             c.drawString(x + 6 * mm, y + 3.8 * mm, f"{dt}")
             c.drawRightString(x + kpi_w - 6 * mm, y + 3.8 * mm, f"{t}")
 
-        # KPI cards (반드시 create_report_pdf_reportlab 함수 '안'에서 실행)
         draw_kpi_card(L, kpi_y, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
         draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-        # Section
-        sec_y = kpi_y - 8*mm
-        c.setFillColor(title_col)
-        c.setFont("NanumGothic-Bold", 13.5)
-        c.drawString(L, sec_y, "문항별 분석")
+        # ===== 분석 제목 제거 =====
+        # (공간 확보용)
 
-        # Analysis cards
-        cards_top = sec_y - 5*mm
-        card_h = 110*mm
+        # ===== Analysis cards =====
+        # ✅ 카드 시작을 KPI 바로 밑으로
+        cards_top = kpi_y - 4*mm
+
+        # ✅ 카드 높이 충분히 크게 (22문항 절대 안 잘리게)
+        card_h = 155*mm
+
         card_w = (usable_w - gap) / 2
         left_x = L
         right_x = L + card_w + gap
@@ -1000,19 +985,21 @@ with tab3:
         def draw_analysis_card(x, y, title_txt, ans_dict, wr_dict, wrong_set):
             draw_round_rect(c, x, y, card_w, card_h, 10*mm, colors.white, stroke, 1)
 
+            # Title inside card
             c.setFillColor(title_col)
             c.setFont("NanumGothic-Bold", 14.5)
-            c.drawString(x + 8*mm, y + card_h - 13*mm, title_txt)
+            c.drawString(x + 8*mm, y + card_h - 12.5*mm, title_txt)
 
-            strip_h = 9.0*mm
-            strip_y = y + card_h - 23.5*mm
+            # Header strip (작게)
+            strip_h = 8.5*mm
+            strip_y = y + card_h - 22.0*mm
             draw_round_rect(c, x + 6*mm, strip_y, card_w - 12*mm, strip_h, 6*mm, pill_fill, stroke, 1)
 
             inner_x = x + 8*mm
             inner_w = card_w - 16*mm
 
             col_q = 11*mm
-            col_wr = 17*mm
+            col_wr = 16*mm
             col_ox = 12*mm
             col_ans = inner_w - (col_q + col_wr + col_ox)
 
@@ -1021,17 +1008,22 @@ with tab3:
             wr_center = inner_x + col_q + col_ans + col_wr/2
             ox_center = inner_x + col_q + col_ans + col_wr + col_ox/2
 
-            header_y = strip_y + 2.6*mm
-            draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 10.2, muted)
-            draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 10.2, muted)
-            draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 10.2, muted)
-            draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 10.2, muted)
+            header_y = strip_y + 2.4*mm
+            draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 9.6, muted)
+            draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 9.6, muted)
+            draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 9.6, muted)
+            draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 9.6, muted)
 
-            row_h = 7.6*mm
-            start_y = strip_y - 2.0*mm - row_h
+            # ✅ row 더 촘촘하게
+            row_h = 6.0*mm
+            row_gap = 0.45*mm
+            start_y = strip_y - 1.8*mm - row_h
+
+            base = 1.55*mm  # baseline
 
             for i, q in enumerate(range(1, 23)):
-                ry = start_y - i*(row_h + 1.2*mm)
+                ry = start_y - i*(row_h + row_gap)
+
                 fill = stripe if (q % 2 == 0) else colors.white
                 c.setFillColor(fill)
                 c.setStrokeColor(fill)
@@ -1041,27 +1033,31 @@ with tab3:
                 lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
                 lines = [ln.strip() for ln in lines if ln.strip() != ""]
                 if not lines: lines = [""]
+
+                # 2줄 이상이면 2줄까지만 (원본이 2줄이면 그대로)
                 if len(lines) > 2:
                     lines = [lines[0], " ".join(lines[1:])]
 
                 wr_txt = wr_to_text(wr_dict.get(q, None))
                 ox = "X" if q in wrong_set else "O"
 
-                draw_text_center(c, q_center, ry + 2.8*mm, str(q), "NanumGothic", 11.2, title_col)
+                # Q / WR / OX 폰트 더 줄임
+                draw_text_center(c, q_center,  ry + base, str(q), "NanumGothic", 10.2, title_col)
 
-                ans_max_w = col_ans - 3.5*mm
-                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 11.2, 7.0, ans_max_w)
+                # Answer: 길면 같은 셀에서 자동 축소 (2줄이면 2줄 모두 같은 폰트 크기)
+                ans_max_w = col_ans - 3.0*mm
+                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 10.4, 6.6, ans_max_w)
 
                 if len(lines) == 1:
-                    draw_text_center(c, ans_center, ry + 2.8*mm, lines[0], "NanumGothic-Bold", fs, title_col)
+                    draw_text_center(c, ans_center, ry + base, lines[0], "NanumGothic-Bold", fs, title_col)
                 else:
-                    draw_text_center(c, ans_center, ry + 3.9*mm, lines[0], "NanumGothic-Bold", fs, title_col)
-                    draw_text_center(c, ans_center, ry + 1.2*mm, lines[1], "NanumGothic-Bold", fs, title_col)
+                    draw_text_center(c, ans_center, ry + (base + 0.85*mm), lines[0], "NanumGothic-Bold", fs, title_col)
+                    draw_text_center(c, ans_center, ry + (base - 0.65*mm), lines[1], "NanumGothic-Bold", fs, title_col)
 
-                draw_text_center(c, wr_center, ry + 2.8*mm, wr_txt, "NanumGothic", 11.2, title_col)
+                draw_text_center(c, wr_center, ry + base, wr_txt, "NanumGothic", 10.2, title_col)
 
                 ox_color = red if ox == "X" else green
-                draw_text_center(c, ox_center, ry + 2.8*mm, ox, "NanumGothic-Bold", 13, ox_color)
+                draw_text_center(c, ox_center, ry + base, ox, "NanumGothic-Bold", 11.6, ox_color)
 
         draw_analysis_card(left_x, card_y, "Module 1", ans_m1, wr_m1, wrong_m1)
         draw_analysis_card(right_x, card_y, "Module 2", ans_m2, wr_m2, wrong_m2)
@@ -1085,7 +1081,7 @@ with tab3:
         try:
             eta_xl = pd.ExcelFile(eta_file)
 
-            # ---- Student Analysis: 학생목록 ONLY (2행 헤더) ----
+            # ---- Student Analysis: 학생목록 ONLY ----
             if STUDENT_SHEET not in eta_xl.sheet_names:
                 st.error(f"⚠️ ETA.xlsx에 '{STUDENT_SHEET}' 시트가 없습니다.")
                 st.stop()
@@ -1099,6 +1095,7 @@ with tab3:
             student_df = raw_sa.iloc[SA_HEADER_ROW_IDX + 1:].copy()
             student_df.columns = sa_header
             student_df = student_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
+
             assert_columns(student_df, [SA_NAME_COL, SA_M1_SCORE_COL, SA_M2_SCORE_COL], STUDENT_SHEET)
 
             students = [_clean(x) for x in student_df[SA_NAME_COL].dropna().tolist()]
@@ -1118,7 +1115,7 @@ with tab3:
 
             assert_columns(
                 quiz_df,
-                [QZ_KEYWORD_COL, QZ_SUBJECT_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
+                [QZ_KEYWORD_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
                 QUIZ_SHEET
             )
 
@@ -1129,6 +1126,7 @@ with tab3:
                 md = _clean(r.get(QZ_MODULE_COL, "")).upper()
                 if nm == "":
                     continue
+
                 if md in ["M1", "MODULE1", "1"]:
                     mod = 1
                 elif md in ["M2", "MODULE2", "2"]:
@@ -1235,7 +1233,7 @@ with tab3:
             )
 
         except ModuleNotFoundError as e:
-            st.error("❌ reportlab이 설치되어 있지 않습니다. Streamlit Cloud라면 requirements.txt에 'reportlab'을 추가해주세요.")
+            st.error("❌ reportlab이 설치되어 있지 않습니다. (requirements.txt에 reportlab 추가 필요)")
             st.exception(e)
         except Exception as e:
             st.error(f"오류 발생: {e}")
