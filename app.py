@@ -475,8 +475,6 @@ with tab1:
     st.markdown("#### 문제 이미지 ZIP 파일")
     img_zip = st.file_uploader("m1, m2 폴더가 들어있는 ZIP 파일", type="zip", key="t1_zip") 
 
-    st.markdown("---") 
-
     st.markdown("#### 오답 현황 엑셀 파일")
     excel_file = st.file_uploader("학생들의 결과 데이터가 담긴 엑셀 파일", type="xlsx", key="t1_excel")
 
@@ -630,7 +628,7 @@ with tab2:
     pb_val = c3.slider("아래 여백(다음 문제 전)", 0, 200, 12, 1, key="t2_pb")
     frq_val = c4.slider("FRQ 아래 여백(px)", 0, 600, 250, 25, key="t2_frq")
 
-    unify_width = st.checkbox("모듈 내 가로폭을 가장 넓은 문제에 맞춤(오른쪽만 확장)", value=False, key="t2_chk")
+    unify_width = st.checkbox("모듈 내 가로폭을 가장 넓은 문제에 맞춤(오른쪽만 확장)", value=True, key="t2_chk")
 
     if pdf_file:
         if st.button("✂️ 자르기 & ZIP 생성", type="primary", key="t2_btn"):
