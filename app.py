@@ -472,21 +472,25 @@ with tab1:
         file_name="Mock결과_양식.xlsx"
     )
 
+
     st.markdown("---")
 
     st.header("📄 문서 제목 입력")
-    doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1)", value="25 S2 SAT MATH 만점반 Mock Test1")
+    doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1)", value="25 S2 SAT MATH 만점반 Mock Test1", key="t1_title")
 
     st.header("📦 파일 업로드")
 
     st.write("") 
-    st.markdown("####  1. 문제 이미지 ZIP 파일")
-    st.caption("M1, M2 폴더 포함된 ZIP 파일 업로드")
-    img_zip = st.file_uploader("문제 ZIP 파일", type="zip")
+    st.markdown("#### 1. 문제 이미지 ZIP 파일")
+    st.caption("`m1`, `m2` 폴더가 들어있는 ZIP 파일을 업로드해주세요.")
+    # [중요] key 값을 추가해야 에러가 안 납니다.
+    img_zip = st.file_uploader("문제 ZIP 파일", type="zip", key="t1_zip") 
 
-    st.markdown("####  2. 오답 현황 엑셀 파일")
-    st.caption("결과파일 업로드 (.xlsx) — 열 이름은 '이름', 'Module1', 'Module2'")
-    excel_file = st.file_uploader("결과파일 엑셀", type="xlsx")
+    st.markdown("---") 
+
+    st.markdown("#### 2. 오답 현황 엑셀 파일")
+    st.caption("학생들의 결과 데이터가 담긴 엑셀 파일을 업로드해주세요.")
+    excel_file = st.file_uploader("결과파일 엑셀", type="xlsx", key="t1_excel")
 
     st.write("") # 버튼과의 여백
 
