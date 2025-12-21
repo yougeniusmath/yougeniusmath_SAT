@@ -975,7 +975,7 @@ with tab3:
         cards_top = kpi_y - 4*mm
 
         # ✅ 카드 높이 충분히 크게 (22문항 절대 안 잘리게)
-        card_h = 155*mm
+        card_h = 165*mm
 
         card_w = (usable_w - gap) / 2
         left_x = L
@@ -985,14 +985,16 @@ with tab3:
         def draw_analysis_card(x, y, title_txt, ans_dict, wr_dict, wrong_set):
             draw_round_rect(c, x, y, card_w, card_h, 10*mm, colors.white, stroke, 1)
 
-            # Title inside card
+            # ✅ 카드 제목 위치 조정 (조금 위/왼쪽)
+            title_x = x + 9*mm
+            title_y = y + card_h - 11.8*mm
             c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 14.5)
-            c.drawString(x + 8*mm, y + card_h - 12.5*mm, title_txt)
+            c.setFont("NanumGothic-Bold", 14.8)
+            c.drawString(title_x, title_y, title_txt)
 
-            # Header strip (작게)
+            # ✅ strip(표 헤더) 위치를 제목 아래로 조금 내림 + 높이 약간 조정
             strip_h = 8.5*mm
-            strip_y = y + card_h - 22.0*mm
+            strip_y = y + card_h - 23.2*mm  # (기존보다 살짝 아래)
             draw_round_rect(c, x + 6*mm, strip_y, card_w - 12*mm, strip_h, 6*mm, pill_fill, stroke, 1)
 
             inner_x = x + 8*mm
@@ -1008,56 +1010,81 @@ with tab3:
             wr_center = inner_x + col_q + col_ans + col_wr/2
             ox_center = inner_x + col_q + col_ans + col_wr + col_ox/2
 
+            # 헤더 텍스트 baseline
             header_y = strip_y + 2.4*mm
             draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 9.6, muted)
             draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 9.6, muted)
             draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 9.6, muted)
             draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 9.6, muted)
 
-            # ✅ row 더 촘촘하게
+            # ====== ✅ 가변 row 높이 설정 ======
             row_h = 6.0*mm
             row_gap = 0.45*mm
-            start_y = strip_y - 1.8*mm - row_h
 
-            base = 1.55*mm  # baseline
+            # 첫 row top
+            cur_y = strip_y - 1.8*mm - row_h
 
-            for i, q in enumerate(range(1, 23)):
-                ry = start_y - i*(row_h + row_gap)
+            # 텍스트 baseline
+            base_1line = 1.55*mm
+            base_2line_top = 2.20*mm
+            base_2line_bottom = 0.85*mm
 
-                fill = stripe if (q % 2 == 0) else colors.white
-                c.setFillColor(fill)
-                c.setStrokeColor(fill)
-                c.roundRect(x + 6*mm, ry, card_w - 12*mm, row_h, 6*mm, fill=1, stroke=0)
-
+            for q in range(1, 23):
+                # answer raw
                 ans_raw = _clean(ans_dict.get(q, ""))
                 lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
                 lines = [ln.strip() for ln in lines if ln.strip() != ""]
-                if not lines: lines = [""]
+                if not lines:
+                    lines = [""]
 
-                # 2줄 이상이면 2줄까지만 (원본이 2줄이면 그대로)
+                # 2줄 이상이면 2줄까지만
                 if len(lines) > 2:
                     lines = [lines[0], " ".join(lines[1:])]
 
+                is_two_line = (len(lines) == 2)
+
+                # ✅ 2줄 정답이면 row 높이를 2배로
+                this_h = (row_h * 2 + row_gap) if is_two_line else row_h
+
+                ry = cur_y
+
+                # 배경 stripe
+                fill = stripe if (q % 2 == 0) else colors.white
+                c.setFillColor(fill)
+                c.setStrokeColor(fill)
+                c.roundRect(x + 6*mm, ry, card_w - 12*mm, this_h, 6*mm, fill=1, stroke=0)
+
+                # 값들
                 wr_txt = wr_to_text(wr_dict.get(q, None))
                 ox = "X" if q in wrong_set else "O"
+                ox_color = red if ox == "X" else green
 
-                # Q / WR / OX 폰트 더 줄임
-                draw_text_center(c, q_center,  ry + base, str(q), "NanumGothic", 10.2, title_col)
+                # Q / WR / OX
+                # ✅ 2줄 row면 세로 가운데 느낌으로 baseline 다르게
+                if is_two_line:
+                    # 가운데 기준을 약간 위로
+                    draw_text_center(c, q_center,  ry + row_h + base_1line, str(q), "NanumGothic", 10.2, title_col)
+                    draw_text_center(c, wr_center, ry + row_h + base_1line, wr_txt, "NanumGothic", 10.2, title_col)
+                    draw_text_center(c, ox_center, ry + row_h + base_1line, ox, "NanumGothic-Bold", 11.6, ox_color)
+                else:
+                    draw_text_center(c, q_center,  ry + base_1line, str(q), "NanumGothic", 10.2, title_col)
+                    draw_text_center(c, wr_center, ry + base_1line, wr_txt, "NanumGothic", 10.2, title_col)
+                    draw_text_center(c, ox_center, ry + base_1line, ox, "NanumGothic-Bold", 11.6, ox_color)
 
-                # Answer: 길면 같은 셀에서 자동 축소 (2줄이면 2줄 모두 같은 폰트 크기)
+                # Answer: 길면 축소 (2줄이면 동일 폰트 크기)
                 ans_max_w = col_ans - 3.0*mm
                 fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 10.4, 6.6, ans_max_w)
 
-                if len(lines) == 1:
-                    draw_text_center(c, ans_center, ry + base, lines[0], "NanumGothic-Bold", fs, title_col)
+                if not is_two_line:
+                    draw_text_center(c, ans_center, ry + base_1line, lines[0], "NanumGothic-Bold", fs, title_col)
                 else:
-                    draw_text_center(c, ans_center, ry + (base + 0.85*mm), lines[0], "NanumGothic-Bold", fs, title_col)
-                    draw_text_center(c, ans_center, ry + (base - 0.65*mm), lines[1], "NanumGothic-Bold", fs, title_col)
+                    # ✅ 2줄 row는 “각 줄이 row 안에서 겹치지 않게” 확실히 띄움
+                    draw_text_center(c, ans_center, ry + row_h + base_2line_top, lines[0], "NanumGothic-Bold", fs, title_col)
+                    draw_text_center(c, ans_center, ry + row_h + base_2line_bottom, lines[1], "NanumGothic-Bold", fs, title_col)
 
-                draw_text_center(c, wr_center, ry + base, wr_txt, "NanumGothic", 10.2, title_col)
+                # 다음 row로 이동
+                cur_y = cur_y - this_h - row_gap
 
-                ox_color = red if ox == "X" else green
-                draw_text_center(c, ox_center, ry + base, ox, "NanumGothic-Bold", 11.6, ox_color)
 
         draw_analysis_card(left_x, card_y, "Module 1", ans_m1, wr_m1, wrong_m1)
         draw_analysis_card(right_x, card_y, "Module 2", ans_m2, wr_m2, wrong_m2)
