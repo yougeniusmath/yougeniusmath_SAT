@@ -12,7 +12,7 @@ import fitz  # PyMuPDF
 # ==============================
 # 0. 기본 설정
 # ==============================
-st.set_page_config(page_title="SAT 자료 가공 도구", layout="wide")
+st.set_page_config(page_title="SAT MATH", layout="centered")
 
 # 폰트 설정 (오답노트용)
 FONT_REGULAR = "fonts/NanumGothic.ttf"
@@ -479,13 +479,23 @@ with tab1:
     doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1)", value="25 S2 SAT MATH 만점반 Mock Test1")
 
     st.header("📦 파일 업로드")
-    st.caption("M1, M2 폴더 포함된 ZIP 파일 업로드")
-    img_zip = st.file_uploader("문제 ZIP 파일", type="zip")
 
-    st.caption("Mock 결과 엑셀 파일 업로드 (.xlsx) — 열 이름은 '이름', 'Module1', 'Module2' (오타/혼용도 허용)")
-    excel_file = st.file_uploader("오답 현황 엑셀", type="xlsx")
+    st.write("") 
+    st.markdown("####  1. 문제 이미지 ZIP 파일")
+    st.caption("`m1`, `m2` 폴더가 들어있는 ZIP 파일을 업로드해주세요.")
+    img_zip = st.file_uploader("", type="zip", key="t1_zip") # 라벨을 위쪽 마크다운으로 대체하여 깔끔하게
+
+    st.markdown("---") # 구분선
+
+    st.markdown("####  2. 오답 현황 엑셀 파일")
+    st.caption("학생들의 결과 데이터가 담긴 엑셀 파일을 업로드해주세요.")
+    excel_file = st.file_uploader("", type="xlsx", key="t1_excel")
+
+    st.write("") # 버튼과의 여백
 
 
+
+    
     if st.button("🚀 오답노트 생성 시작", type="primary", key="t1_btn"):
         if not img_zip or not excel_file:
             st.warning("⚠️ 이미지 ZIP 파일과 엑셀 파일을 모두 업로드해주세요.")
