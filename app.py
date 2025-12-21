@@ -971,7 +971,7 @@ with tab3:
             # Score (위로 올림)
             c.setFont("NanumGothic-Bold", 18)
             c.setFillColor(title_col)
-            c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 12.6 * mm, str(score_txt))
+            c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 11.7 * mm, str(score_txt))
 
             # Date/Time, Time 라벨 제거 -> 값만 출력
             c.setFont("NanumGothic", 9)
@@ -1027,8 +1027,8 @@ with tab3:
             draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 10.2, muted)
             draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 10.2, muted)
 
-            row_h = 9.0*mm
-            start_y = strip_y - 2.8*mm - row_h
+            row_h = 7.6*mm
+            start_y = strip_y - 2.0*mm - row_h
 
             for i, q in enumerate(range(1, 23)):
                 ry = start_y - i*(row_h + 1.2*mm)
