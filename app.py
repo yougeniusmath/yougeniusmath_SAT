@@ -664,13 +664,12 @@ with tab2:
                     )
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
-
 # ---------------------------------------------------------
-# [Tab 3] 개인 성적표 (ReportLab / Student Analysis 기준 학생목록 + Quizresult 메타)
+# [Tab 3] 개인 성적표 (ReportLab / Student Analysis 학생목록 + QuizResults 메타)
 # ---------------------------------------------------------
 with tab3:
     st.header("📊 개인 성적표")
-    st.info("Student Analysis(학생목록) + Quizresult(Date/Time/Time/Score/Wrong/Keyword) + Mock데이터(정답) + Error Analysis(오답률)")
+    st.info("Student Analysis(학생목록) + QuizResults(Date/Time/Time/Score/Wrong/Keyword) + Mock데이터(정답) + Error Analysis(오답률)")
 
     eta_file = st.file_uploader("ETA 결과 파일 업로드 (ETA.xlsx)", type=["xlsx"], key="t3_eta")
     mock_file = st.file_uploader("Mock 정답 파일 업로드 (Mock데이터.xlsx)", type=["xlsx"], key="t3_mock")
@@ -681,20 +680,23 @@ with tab3:
     with c2:
         generated_date = st.date_input("Generated 날짜", value=datetime.now().date(), key="t3_gen_date")
 
-    # 부제목은 Quizresult의 '검색 키워드'로 자동 (사용자 입력 제거)
-    st.caption("부제목은 Quizresult의 '검색 키워드'가 자동으로 들어갑니다.")
+    st.caption("부제목은 QuizResults의 '검색 키워드'가 학생별로 자동으로 들어갑니다.")
 
     # =========================
     # 고정 규칙
     # =========================
     HEADER_ROW_IDX = 1  # ✅ 2행이 헤더(엑셀 2행 -> pandas index 1)
 
+    STUDENT_SHEET = "Student Analysis"
+    QUIZ_SHEET = "QuizResults"
+    ERROR_SHEET = "Error Analysis"
+
     # Student Analysis: 학생목록은 무조건 여기서만
     SA_NAME_COL = "학생 이름"
     SA_M1_SCORE_COL = "[M1] 점수"
     SA_M2_SCORE_COL = "[M2] 점수"
 
-    # Quizresult: 메타는 여기서만
+    # QuizResults: 메타는 여기서만 (너가 준 고정 컬럼명)
     QZ_KEYWORD_COL = "검색 키워드"
     QZ_MODULE_COL  = "모듈"
     QZ_NAME_COL    = "학생 이름"
@@ -740,10 +742,16 @@ with tab3:
         except:
             return "-"
 
-    # ✅ Error Analysis 오답률 고정 범위
-    # M1 = C3:C24, M2 = C26:C47
+    def assert_columns(df, cols, label):
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            st.error(f"⚠️ {label} 컬럼 누락: {missing}")
+            st.write(f"현재 {label} 컬럼:", list(df.columns))
+            st.stop()
+
+    # ✅ Error Analysis 오답률 고정 범위: M1=C3:C24, M2=C26:C47
     def build_wrong_rate_dict_fixed_ranges(eta_xl):
-        df = pd.read_excel(eta_xl, sheet_name="Error Analysis", header=None)
+        df = pd.read_excel(eta_xl, sheet_name=ERROR_SHEET, header=None)
         colC = df.iloc[:, 2].tolist()  # C열(0-based idx=2)
 
         m1_vals = colC[2:24]    # C3:C24 (22개)
@@ -796,13 +804,6 @@ with tab3:
             return dct
 
         return rows_to_ans(m1_rows), rows_to_ans(m2_rows)
-
-    def assert_columns(df, cols, label):
-        missing = [c for c in cols if c not in df.columns]
-        if missing:
-            st.error(f"⚠️ {label} 컬럼 누락: {missing}")
-            st.write(f"현재 {label} 컬럼:", list(df.columns))
-            st.stop()
 
     # =========================
     # ReportLab
@@ -1057,12 +1058,12 @@ with tab3:
         try:
             eta_xl = pd.ExcelFile(eta_file)
 
-            # ---------- Student Analysis (학생목록 ONLY) ----------
-            if "Student Analysis" not in eta_xl.sheet_names:
-                st.error("⚠️ ETA.xlsx에 'Student Analysis' 시트가 없습니다.")
+            # ---- Student Analysis: 학생목록 ONLY ----
+            if STUDENT_SHEET not in eta_xl.sheet_names:
+                st.error(f"⚠️ ETA.xlsx에 '{STUDENT_SHEET}' 시트가 없습니다.")
                 st.stop()
 
-            raw_sa = pd.read_excel(eta_xl, sheet_name="Student Analysis", header=None)
+            raw_sa = pd.read_excel(eta_xl, sheet_name=STUDENT_SHEET, header=None)
             if raw_sa.shape[0] <= HEADER_ROW_IDX:
                 st.error("⚠️ Student Analysis에서 2행(헤더)을 찾을 수 없습니다.")
                 st.stop()
@@ -1071,8 +1072,7 @@ with tab3:
             student_df = raw_sa.iloc[HEADER_ROW_IDX + 1:].copy()
             student_df.columns = sa_header
             student_df = student_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
-
-            assert_columns(student_df, [SA_NAME_COL, SA_M1_SCORE_COL, SA_M2_SCORE_COL], "Student Analysis")
+            assert_columns(student_df, [SA_NAME_COL, SA_M1_SCORE_COL, SA_M2_SCORE_COL], STUDENT_SHEET)
 
             students = [_clean(x) for x in student_df[SA_NAME_COL].dropna().tolist()]
             students = [s for s in students if s != ""]
@@ -1080,14 +1080,14 @@ with tab3:
                 st.error("학생 목록이 비어있습니다.")
                 st.stop()
 
-            # ---------- Quizresult (메타 ONLY) ----------
-            if "Quizresult" not in eta_xl.sheet_names:
-                st.error("⚠️ ETA.xlsx에 'Quizresult' 시트가 없습니다. (Date/Time/Time/Score/Wrong/Keyword 필요)")
+            # ---- QuizResults: Date/Time/Time/Score/Wrong/Keyword ----
+            if QUIZ_SHEET not in eta_xl.sheet_names:
+                st.error(f"⚠️ ETA.xlsx에 '{QUIZ_SHEET}' 시트가 없습니다.")
                 st.stop()
 
-            raw_qz = pd.read_excel(eta_xl, sheet_name="Quizresult", header=None)
+            raw_qz = pd.read_excel(eta_xl, sheet_name=QUIZ_SHEET, header=None)
             if raw_qz.shape[0] <= HEADER_ROW_IDX:
-                st.error("⚠️ Quizresult에서 2행(헤더)을 찾을 수 없습니다.")
+                st.error("⚠️ QuizResults에서 2행(헤더)을 찾을 수 없습니다.")
                 st.stop()
 
             qz_header = raw_qz.iloc[HEADER_ROW_IDX].astype(str).tolist()
@@ -1098,11 +1098,10 @@ with tab3:
             assert_columns(
                 quiz_df,
                 [QZ_KEYWORD_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
-                "Quizresult"
+                QUIZ_SHEET
             )
 
-            # {name: {1:{...}, 2:{...}}}
-            quiz_map = {}
+            quiz_map = {}  # {name: {1:{...}, 2:{...}}}
             for _, r in quiz_df.iterrows():
                 nm = _clean(r.get(QZ_NAME_COL, ""))
                 md = _clean(r.get(QZ_MODULE_COL, "")).upper()
@@ -1124,16 +1123,16 @@ with tab3:
                     "keyword": _clean(r.get(QZ_KEYWORD_COL, "")) or "",
                 }
 
-            # ---------- Error Analysis (오답률) ----------
-            if "Error Analysis" in eta_xl.sheet_names:
+            # ---- Error Analysis 오답률 ----
+            if ERROR_SHEET in eta_xl.sheet_names:
                 wr1, wr2 = build_wrong_rate_dict_fixed_ranges(eta_xl)
             else:
                 wr1, wr2 = {}, {}
 
-            # ---------- Mock answers ----------
+            # ---- Mock 정답 ----
             ans1, ans2 = read_mock_answers(mock_file)
 
-            # ---------- Generate PDFs ----------
+            # ---- PDF 생성 ----
             output_dir = "generated_reports"
             os.makedirs(output_dir, exist_ok=True)
 
@@ -1155,19 +1154,11 @@ with tab3:
                     prog.progress((i+1)/len(students))
                     continue
 
-                # ✅ 부제목은 Quizresult의 '검색 키워드'
+                # ✅ 부제목: 검색 키워드 (Module1 우선, 없으면 Module2)
                 subtitle_kw = _clean(m1.get("keyword", "")) or _clean(m2.get("keyword", "")) or "-"
 
-                m1_meta = {
-                    "score": f"{m1_score_raw} / 22",
-                    "dt": m1.get("dt", "-"),
-                    "time": m1.get("time", "-"),
-                }
-                m2_meta = {
-                    "score": f"{m2_score_raw} / 22",
-                    "dt": m2.get("dt", "-"),
-                    "time": m2.get("time", "-"),
-                }
+                m1_meta = {"score": f"{m1_score_raw} / 22", "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
+                m2_meta = {"score": f"{m2_score_raw} / 22", "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
 
                 wrong1 = set(m1.get("wrong_set", set()))
                 wrong2 = set(m2.get("wrong_set", set()))
@@ -1177,7 +1168,7 @@ with tab3:
                 create_report_pdf_reportlab(
                     output_path=pdf_path,
                     title=report_title,
-                    subtitle=subtitle_kw,  # ✅ keyword
+                    subtitle=subtitle_kw,
                     gen_date_str=generated_date.strftime("%Y-%m-%d"),
                     student_name=stu,
                     m1_meta=m1_meta,
@@ -1194,7 +1185,7 @@ with tab3:
                 prog.progress((i+1)/len(students))
 
             if not made_files:
-                st.warning("생성된 PDF가 없습니다. (M1/M2 점수 blank로 모두 제외되었을 수 있어요)")
+                st.warning("생성된 PDF가 없습니다. (QuizResults 점수 blank로 모두 제외되었을 수 있어요)")
                 if skipped:
                     with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
                         for s in skipped:
@@ -1210,7 +1201,7 @@ with tab3:
 
             st.success(f"✅ 생성 완료: {len(made_files)}명 (제외: {len(skipped)}명)")
             if skipped:
-                with st.expander(f"제외된 학생 ({len(skipped)}명) - Quizresult 점수 blank"):
+                with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
                     for s in skipped:
                         st.write(f"- {s}")
 
@@ -1222,25 +1213,9 @@ with tab3:
                 key="t3_download_zip"
             )
 
-            st.subheader("👁️ 개별 PDF 다운로드")
-            student_names = [n for n, _ in made_files]
-            selected = st.selectbox("학생 선택", student_names, key="t3_pick")
-            if selected:
-                mp = {n:p for n,p in made_files}
-                pth = mp[selected]
-                if os.path.exists(pth):
-                    with open(pth, "rb") as f:
-                        st.download_button(
-                            f"📄 '{selected}' PDF 다운로드",
-                            data=f,
-                            file_name=os.path.basename(pth),
-                            key="t3_down_one"
-                        )
-
         except ModuleNotFoundError as e:
             st.error("❌ reportlab이 설치되어 있지 않습니다. Streamlit Cloud라면 requirements.txt에 'reportlab'을 추가해주세요.")
             st.exception(e)
-
         except Exception as e:
             st.error(f"오류 발생: {e}")
             st.exception(e)
