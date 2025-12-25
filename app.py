@@ -20,27 +20,22 @@ pdf_font_name = "NanumGothic"
 
 font_ready = os.path.exists(FONT_REGULAR) and os.path.exists(FONT_BOLD)
 
-if not font_ready:
-    st.error("⚠️ 한글 PDF 생성을 위해 fonts 폴더에 NanumGothic.ttf / NanumGothicBold.ttf가 필요합니다.")
-
-# Tab1 PDF 클래스
+# Tab1용 PDF
 if font_ready:
     class KoreanPDF(FPDF):
         def __init__(self):
             super().__init__()
             self.set_margins(25.4, 30, 25.4)
             self.set_auto_page_break(auto=True, margin=25.4)
-            self.add_font(pdf_font_name, '', FONT_REGULAR, uni=True)
-            self.add_font(pdf_font_name, 'B', FONT_BOLD, uni=True)
+            self.add_font(pdf_font_name, "", FONT_REGULAR, uni=True)
+            self.add_font(pdf_font_name, "B", FONT_BOLD, uni=True)
             self.set_font(pdf_font_name, size=10)
+else:
+    st.error("⚠️ fonts 폴더에 NanumGothic.ttf / NanumGothicBold.ttf 가 필요합니다.")
 
 # =========================================================
-# [전역 함수] Tab 1, 2, 3에서 쓰이는 함수들
+# [Tab 1] 오답노트 생성기 함수
 # =========================================================
-
-# -------------------------
-# [Tab 1] 오답노트 관련
-# -------------------------
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
@@ -84,15 +79,14 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     if found["Module2"]:
         rename_map[found["Module2"]] = "Module2"
 
-    df = df.rename(columns=rename_map)
-    return df
+    return df.rename(columns=rename_map)
 
 def extract_zip_to_dict(zip_file):
     m1_imgs, m2_imgs = {}, {}
     with zipfile.ZipFile(zip_file) as z:
         for file in z.namelist():
-            if file.lower().endswith(('png', 'jpg', 'jpeg', 'webp')):
-                parts = file.split('/')
+            if file.lower().endswith(("png", "jpg", "jpeg", "webp")):
+                parts = file.split("/")
                 if len(parts) < 2:
                     continue
                 folder = parts[0].lower()
@@ -110,7 +104,7 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
         return None
     pdf = KoreanPDF()
     pdf.add_page()
-    pdf.set_font(pdf_font_name, style='B', size=10)
+    pdf.set_font(pdf_font_name, style="B", size=10)
     pdf.cell(0, 8, txt=f"<{name}_{doc_title}>", ln=True)
 
     def add_images(title, images):
@@ -142,19 +136,18 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     pdf.output(pdf_path)
     return pdf_path
 
-# -------------------------
-# [Tab 2] PDF 자르기
-# -------------------------
+# =========================================================
+# [Tab 2] PDF 문제 자르기 함수
+# =========================================================
 MODULE_RE = re.compile(r"<\s*MODULE\s*(\d+)\s*>", re.IGNORECASE)
 HEADER_FOOTER_HINT_RE = re.compile(
     r"(YOU,\s*GENIUS|700\+\s*MOCK\s*TEST|Kakaotalk|Instagram|010-\d{3,4}-\d{4}|Module\s*\d+|SECTION)",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 NUMDOT_RE = re.compile(r"^(\d{1,2})\.$")
 NUM_RE = re.compile(r"^\d{1,2}$")
 CHOICE_LABELS = ["D)", "C)", "B)", "A)"]
 SIDE_PAD_PX = 10
-INK_PAD_PX = 10
 SCAN_ZOOM = 0.6
 WHITE_THRESH = 250
 
@@ -201,6 +194,7 @@ def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
         qnum = None
         y_top = None
 
+        # "21."
         for (x0, y0, x1, y1, txt) in tokens:
             m = NUMDOT_RE.match(txt)
             if m:
@@ -208,6 +202,7 @@ def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
                 y_top = y0
                 break
 
+        # "21" "."
         if qnum is None:
             for i in range(len(tokens) - 1):
                 t1 = tokens[i][4]
@@ -226,12 +221,9 @@ def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
     anchors.sort(key=lambda t: t[1])
     return anchors
 
-def band_text(page, clip):
-    return (page.get_text("text", clip=clip) or "")
-
 def last_choice_bottom_y_in_band(page, y_from, y_to):
     clip = fitz.Rect(0, y_from, page.rect.width, y_to)
-    t = band_text(page, clip)
+    t = (page.get_text("text", clip=clip) or "")
     if "A)" not in t:
         return None
     for lab in CHOICE_LABELS:
@@ -298,26 +290,22 @@ def ink_bbox_by_raster(page, clip, scan_zoom=SCAN_ZOOM, white_thresh=WHITE_THRES
 
     minx, miny = w, h
     maxx, maxy = -1, -1
-    step = 2
 
+    step = 2
     for y in range(0, h, step):
         for x in range(0, w, step):
             r, g, b = px[x, y]
             if r < white_thresh or g < white_thresh or b < white_thresh:
-                if x < minx:
-                    minx = x
-                if y < miny:
-                    miny = y
-                if x > maxx:
-                    maxx = x
-                if y > maxy:
-                    maxy = y
+                minx = min(minx, x)
+                miny = min(miny, y)
+                maxx = max(maxx, x)
+                maxy = max(maxy, y)
 
     if maxx < 0:
         return None
     return (minx, miny, maxx, maxy, w, h)
 
-def px_bbox_to_page_rect(clip, px_bbox, pad_px=INK_PAD_PX):
+def px_bbox_to_page_rect(clip, px_bbox, pad_px=10):
     minx, miny, maxx, maxy, w, h = px_bbox
     minx = max(0, minx - pad_px)
     miny = max(0, miny - pad_px)
@@ -368,17 +356,15 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
         for i, (qnum, y0) in enumerate(anchors):
             y_start_candidate = clamp(y0 - pad_top, 0, h)
             safe_y = y_start_candidate
-
             for b in page_blocks:
                 b_y1 = b[3]
                 b_text = b[4]
-                if HEADER_FOOTER_HINT_RE.search(str(b_text or "")):
+                if HEADER_FOOTER_HINT_RE.search(b_text):
                     if b_y1 < y0 and b_y1 > safe_y:
                         safe_y = b_y1 + 2
                 else:
                     if b_y1 > safe_y and b_y1 < y0 - 2:
                         safe_y = b_y1 + 2
-
             y_start = clamp(safe_y, 0, h)
 
             if i + 1 < len(anchors):
@@ -427,13 +413,15 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
             if is_frq:
                 y_end = min(y_cap, y_end + frq_extra_pt)
 
-            rects.append({
-                "mod": current_module,
-                "qnum": qnum,
-                "page": pno,
-                "rect": fitz.Rect(x0, y_start, x1, y_end),
-                "page_width": w,
-            })
+            rects.append(
+                {
+                    "mod": current_module,
+                    "qnum": qnum,
+                    "page": pno,
+                    "rect": fitz.Rect(x0, y_start, x1, y_end),
+                    "page_width": w,
+                }
+            )
 
     return doc, rects
 
@@ -454,9 +442,9 @@ def make_zip_from_rects(doc, rects, zoom, zip_base_name, unify_width_right=True)
     buf.seek(0)
     return buf, zip_base_name + ".zip"
 
-# -------------------------
-# [Tab 3] 개인 성적표
-# -------------------------
+# =========================================================
+# [Tab 3] 개인 성적표 함수
+# =========================================================
 def _clean(x):
     if x is None:
         return ""
@@ -480,7 +468,7 @@ def parse_wrong_list(val):
             pass
     return out
 
-# 정답률 텍스트 (0~100% 모두 표시, None만 '-')
+# 정답률 표시: 0%도 표시(유지), 100%도 표시(유지)
 def wr_to_text(v):
     if v is None:
         return "-"
@@ -505,12 +493,13 @@ def assert_columns(df, cols, label):
         st.write(f"현재 {label} 컬럼:", list(df.columns))
         st.stop()
 
-# 정답률(Accuracy) 시트: 고정 범위 C3:C24 / C26:C47
-def build_accuracy_dict_fixed_ranges(eta_xl, sheet_name):
+# ✅ 범위는 그대로 (C3:C24, C26:C47) - 값은 이제 "정답률"이라고 가정하고 그대로 사용
+def build_wrong_rate_dict_fixed_ranges(eta_xl, sheet_name="Error Analysis"):
     df = pd.read_excel(eta_xl, sheet_name=sheet_name, header=None)
-    colC = df.iloc[:, 2].tolist()
-    m1_vals = colC[2:24]    # C3:C24 (22)
-    m2_vals = colC[25:47]   # C26:C47 (22)
+    colC = df.iloc[:, 2].tolist()  # C열
+
+    m1_vals = colC[2:24]   # C3:C24 (22개)
+    m2_vals = colC[25:47]  # C26:C47 (22개)
 
     def to_dict(vals):
         out = {}
@@ -528,8 +517,18 @@ def read_mock_answers(mock_bytes):
     cols = set(df.columns.astype(str))
 
     if {"모듈", "문항번호", "정답"}.issubset(cols):
-        m1 = df[df["모듈"].astype(str).str.upper().eq("M1")].set_index("문항번호")["정답"].astype(str).to_dict()
-        m2 = df[df["모듈"].astype(str).str.upper().eq("M2")].set_index("문항번호")["정답"].astype(str).to_dict()
+        m1 = (
+            df[df["모듈"].astype(str).str.upper().eq("M1")]
+            .set_index("문항번호")["정답"]
+            .astype(str)
+            .to_dict()
+        )
+        m2 = (
+            df[df["모듈"].astype(str).str.upper().eq("M2")]
+            .set_index("문항번호")["정답"]
+            .astype(str)
+            .to_dict()
+        )
         m1 = {int(k): _clean(v) for k, v in m1.items() if str(k).strip().isdigit()}
         m2 = {int(k): _clean(v) for k, v in m2.items() if str(k).strip().isdigit()}
         return m1, m2
@@ -548,7 +547,7 @@ def read_mock_answers(mock_bytes):
 
     m2i = m2_idxs[0]
     m1_rows = df.iloc[:m2i]
-    m2_rows = df.iloc[m2i+1:]
+    m2_rows = df.iloc[m2i + 1 :]
 
     def rows_to_ans(rows):
         dct = {}
@@ -562,7 +561,9 @@ def read_mock_answers(mock_bytes):
 
     return rows_to_ans(m1_rows), rows_to_ans(m2_rows)
 
-# -------- ReportLab --------
+# =========================
+# ReportLab (Tab3 PDF)
+# =========================
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -619,241 +620,264 @@ def create_report_pdf_reportlab(
     c = canvas.Canvas(output_path, pagesize=A4)
     W, H = A4
 
-    # ===== Palette (예전 느낌) =====
-    stroke = colors.Color(226/255, 232/255, 240/255)
-    header_line = colors.Color(30/255, 41/255, 59/255)
-    text_main = colors.Color(15/255, 23/255, 42/255)
-    text_sub  = colors.Color(100/255, 116/255, 139/255)
-    pill_fill = colors.Color(241/255, 245/255, 249/255)
-    row_stripe = colors.Color(248/255, 250/255, 252/255)
-    green = colors.Color(22/255, 101/255, 52/255)
-    red = colors.Color(220/255, 38/255, 38/255)
+    # ===== Print-friendly 팔레트(화이트 베이스) =====
+    stroke = colors.Color(203 / 255, 213 / 255, 225 / 255)
+    header_line = colors.Color(30 / 255, 41 / 255, 59 / 255)
+    text_main = colors.Color(15 / 255, 23 / 255, 42 / 255)
+    text_sub = colors.Color(100 / 255, 116 / 255, 139 / 255)
+    green = colors.Color(22 / 255, 101 / 255, 52 / 255)
+    red = colors.Color(220 / 255, 38 / 255, 38 / 255)
+    row_stripe = colors.Color(248 / 255, 250 / 255, 252 / 255)
+    pill_fill = colors.Color(241 / 255, 245 / 255, 249 / 255)
 
-    # ===== Margins =====
-    L = 15*mm
-    R = 15*mm
-    TOP = H - 30*mm
+    # ===== 여백/기준 =====
+    L = 15 * mm
+    R = 15 * mm
     usable_w = W - L - R
 
-    # ===== Header =====
+    # ✅ Generated 위치: 더 위로(상단 라인)
+    top_meta_y = H - 12 * mm
     c.setFillColor(text_sub)
-    c.setFont("NanumGothic", 9)
-    c.drawRightString(W - R, TOP + 5*mm, f"Generated: {gen_date_str}")
+    c.setFont("NanumGothic", 9.5)
+    c.drawRightString(W - R, top_meta_y, f"Generated: {gen_date_str}")
 
+    # ===== Title block (예전 느낌 유지: 굵고 큼) =====
+    title_y = H - 28 * mm
     c.setFillColor(text_main)
-    c.setFont("NanumGothic-Bold", 28)
-    c.drawString(L, TOP, title)
+    c.setFont("NanumGothic-Bold", 30)
+    c.drawString(L, title_y, title)
 
     c.setFillColor(text_sub)
     c.setFont("NanumGothic", 13)
-    c.drawString(L, TOP - 11*mm, subtitle)
+    c.drawString(L, title_y - 10 * mm, subtitle)
 
-    # Name pill (왼쪽 이미지 스타일)
-    pill_w = 70*mm
-    pill_h = 16*mm
+    # ===== Name pill (왼쪽 예시처럼) =====
+    pill_w = 70 * mm
+    pill_h = 18 * mm
     pill_x = W - R - pill_w
-    pill_y = TOP - 10*mm
-
+    pill_y = title_y - 7 * mm  # 제목 라인 근처
     c.setLineWidth(0.8)
     c.setStrokeColor(stroke)
     c.setFillColor(pill_fill)
-    c.roundRect(pill_x, pill_y, pill_w, pill_h, 7*mm, fill=1, stroke=1)
+    c.roundRect(pill_x, pill_y, pill_w, pill_h, 9 * mm, fill=1, stroke=1)
 
     c.setFillColor(text_sub)
     c.setFont("NanumGothic-Bold", 10)
-    c.drawString(pill_x + 6*mm, pill_y + 5.6*mm, "Name")
+    c.drawString(pill_x + 7 * mm, pill_y + 11.2 * mm, "Name")
 
     c.setFillColor(text_main)
-    max_name_w = pill_w - 22*mm
-    name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 10, max_name_w)
+    max_name_w = pill_w - 28 * mm
+    name_fs = fit_font_size(student_name, "NanumGothic-Bold", 16, 10, max_name_w)
     c.setFont("NanumGothic-Bold", name_fs)
-    c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
+    c.drawRightString(pill_x + pill_w - 7 * mm, pill_y + 6.0 * mm, student_name)
 
-    # Divider
-    c.setLineWidth(1.5)
+    # ===== Divider line =====
+    c.setLineWidth(2.0)
     c.setStrokeColor(header_line)
-    line_y = TOP - 18*mm
+    line_y = title_y - 18 * mm
     c.line(L, line_y, W - R, line_y)
 
-    # ===== KPI (예전 스타일) =====
-    kpi_h = 34*mm
-    gap = 8*mm
+    # ===== KPI 영역 (세로 크기 줄임) =====
+    kpi_h = 32 * mm  # ✅ 더 낮게
+    gap = 8 * mm
     kpi_w = (usable_w - gap) / 2
-
-    kpi_gap_from_line = 6*mm
+    kpi_gap_from_line = 6 * mm
     kpi_y = line_y - kpi_gap_from_line - kpi_h  # bottom y
 
     def draw_kpi_simple(x, y, w, h, label, score, dt, t):
         c.setLineWidth(0.8)
         c.setStrokeColor(stroke)
         c.setFillColor(colors.white)
-        c.roundRect(x, y, w, h, 7*mm, fill=1, stroke=1)
+        c.roundRect(x, y, w, h, 5 * mm, fill=1, stroke=1)
 
         c.setFillColor(text_main)
-        c.setFont("NanumGothic-Bold", 14)
-        c.drawString(x + 7*mm, y + h - 9*mm, label)
+        c.setFont("NanumGothic-Bold", 16)
+        c.drawString(x + 7 * mm, y + h - 11 * mm, label)
 
         c.setFillColor(text_main)
-        c.setFont("NanumGothic-Bold", 26)
-        c.drawRightString(x + w - 7*mm, y + h - 12*mm, str(score))
+        c.setFont("NanumGothic-Bold", 30)
+        c.drawRightString(x + w - 7 * mm, y + h - 12 * mm, str(score))
+
+        c.setLineWidth(0.6)
+        c.setStrokeColor(colors.Color(241 / 255, 245 / 255, 249 / 255))
+        mid_y = y + 12 * mm
+        c.line(x + 5 * mm, mid_y, x + w - 5 * mm, mid_y)
 
         c.setFillColor(text_sub)
         c.setFont("NanumGothic", 10)
-        c.drawString(x + 7*mm, y + 6*mm, f"{dt}")
-        c.drawRightString(x + w - 7*mm, y + 6*mm, f"{t}")
+        c.drawString(x + 7 * mm, y + 6.2 * mm, f"{dt}")
+        c.drawRightString(x + w - 7 * mm, y + 6.2 * mm, f"{t}")
 
+    # ✅ “Results” 예전이 더 좋다 했으니 label도 예전처럼
     draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
     draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-    # ===== Cards area (22번에서 딱 끝나도록 자동 높이) =====
-    bottom_margin = 14*mm
-    cards_gap_from_kpi = 8*mm
-    cards_top = kpi_y - cards_gap_from_kpi
+    # ===== 표(Analysis 단어 제거 + Answer 폭 줄이고 정답률/Result 여유) =====
+    cards_top = kpi_y - 8 * mm
 
-    card_y = bottom_margin
-    card_h = cards_top - card_y
+    # 페이지 하단 여백 + 푸터(카톡/폰) 공간 확보
+    footer_h = 16 * mm
+    bottom_margin = 10 * mm
+    card_bottom = bottom_margin + footer_h
+    card_h = cards_top - card_bottom
+    card_y = cards_top - card_h
 
-    def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
-        c.setLineWidth(0.5)
+    def draw_table_card(x, y, w, h, module_title, ans_dict, acc_dict, wrong_set):
+        c.setLineWidth(0.8)
         c.setStrokeColor(stroke)
-        c.rect(x, y, w, h, stroke=1, fill=0)
-
-        header_h = 10*mm
-        c.setFillColor(header_line)
-        c.rect(x, y + h - header_h, w, header_h, stroke=0, fill=1)
-
         c.setFillColor(colors.white)
-        c.setFont("NanumGothic-Bold", 11)
-        c.drawCentredString(x + w/2, y + h - 6.5*mm, module_name)
+        c.roundRect(x, y, w, h, 6 * mm, fill=1, stroke=1)
 
-        sub_header_y = y + h - header_h - 8*mm
+        # 상단 헤더 바 (짙은색)
+        header_h = 10 * mm
+        c.setFillColor(header_line)
+        c.roundRect(x, y + h - header_h, w, header_h, 6 * mm, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("NanumGothic-Bold", 12.5)
+        c.drawCentredString(x + w / 2, y + h - 6.8 * mm, module_title)
 
-        # Answer 줄이고, 정답률/Result 넓힘
-        col_q = 9*mm
-        col_wr = 18*mm
-        col_ox = 14*mm
-        col_ans = w - (col_q + col_wr + col_ox)
+        # 컬럼 헤더
+        sub_header_y = y + h - header_h - 7.5 * mm
 
-        cx_q = x + col_q/2
-        cx_ans = x + col_q + col_ans/2
-        cx_wr = x + col_q + col_ans + col_wr/2
-        cx_ox = x + col_q + col_ans + col_wr + col_ox/2
+        # ✅ Answer 줄이고, 정답률/Result 넓힘
+        col_q = 10 * mm
+        col_ans = 22 * mm   # ✅ 더 작게
+        col_acc = 20 * mm   # ✅ 더 넓게
+        col_res = 14 * mm   # ✅ 더 넓게
+        # 남는 폭은 가운데 padding으로 흡수
+        remaining = w - (col_q + col_ans + col_acc + col_res)
+        left_pad = max(4 * mm, remaining / 2)
+
+        x0 = x + left_pad
+        cx_q = x0 + col_q / 2
+        cx_ans = x0 + col_q + col_ans / 2
+        cx_acc = x0 + col_q + col_ans + col_acc / 2
+        cx_res = x0 + col_q + col_ans + col_acc + col_res / 2
 
         c.setFillColor(text_sub)
-        c.setFont("NanumGothic-Bold", 9)
+        c.setFont("NanumGothic-Bold", 9.5)
         c.drawCentredString(cx_q, sub_header_y, "No.")
         c.drawCentredString(cx_ans, sub_header_y, "Answer")
-        c.drawCentredString(cx_wr, sub_header_y, "정답률")
-        c.drawCentredString(cx_ox, sub_header_y, "Result")
+        c.drawCentredString(cx_acc, sub_header_y, "정답률")
+        c.drawCentredString(cx_res, sub_header_y, "Result")
 
         c.setStrokeColor(stroke)
-        c.line(x + 2*mm, sub_header_y - 3*mm, x + w - 2*mm, sub_header_y - 3*mm)
+        c.setLineWidth(0.7)
+        c.line(x + 4 * mm, sub_header_y - 3 * mm, x + w - 4 * mm, sub_header_y - 3 * mm)
 
-        base_font_size = 10
+        # ✅ 22줄이 카드 끝에 정확히 맞게 row_h 자동계산
+        top_of_rows = sub_header_y - 3.8 * mm
+        bottom_of_rows = y + 6 * mm
+        total_rows = 22
+        row_h = (top_of_rows - bottom_of_rows) / total_rows
 
-        # 22줄이 카드 바닥에 딱 맞도록 row_h 자동 계산
-        top_rows_y = sub_header_y - 3*mm
-        available_h = top_rows_y - y
-        row_h = available_h / 22.0
-        start_ry = top_rows_y - row_h
-
+        base_font = 10
         for i, q in enumerate(range(1, 23)):
-            ry = start_ry - i * row_h
+            row_top = top_of_rows - i * row_h
+            ry = row_top - row_h
 
             if q % 2 == 0:
                 c.setFillColor(row_stripe)
-                c.rect(x + 0.5, ry, w - 1, row_h, stroke=0, fill=1)
+                c.rect(x + 2 * mm, ry, w - 4 * mm, row_h, stroke=0, fill=1)
 
             ans_raw = _clean(ans_dict.get(q, ""))
-            rate_val = wr_dict.get(q, None)
-            wr_txt = wr_to_text(rate_val)
+            acc_val = acc_dict.get(q, None)  # ✅ 정답률 (0~1)
+            acc_txt = wr_to_text(acc_val)
             ox = "X" if q in wrong_set else "O"
 
-            text_y = ry + row_h * 0.35
+            # 텍스트 baseline
+            text_y = ry + row_h * 0.32
 
+            # No.
             c.setFillColor(text_main)
-            c.setFont("NanumGothic", base_font_size)
+            c.setFont("NanumGothic", base_font)
             c.drawCentredString(cx_q, text_y, str(q))
 
+            # Answer (작게)
             lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
             lines = [ln.strip() for ln in lines if ln.strip() != ""]
             if not lines:
                 lines = [""]
 
-            avail_w = col_ans - 2*mm
-            c.setFillColor(text_main)
-
+            avail_w = col_ans - 2 * mm
             if len(lines) == 1:
-                fs = fit_font_size(lines[0], "NanumGothic-Bold", base_font_size, 7, avail_w)
+                fs = fit_font_size(lines[0], "NanumGothic-Bold", 10, 7, avail_w)
                 c.setFont("NanumGothic-Bold", fs)
+                c.setFillColor(text_main)
                 c.drawCentredString(cx_ans, text_y, lines[0])
             else:
-                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 9, 6, avail_w)
+                fs = fit_font_size_two_lines(lines[:2], "NanumGothic-Bold", 9, 6, avail_w)
                 c.setFont("NanumGothic-Bold", fs)
-                c.drawCentredString(cx_ans, text_y + row_h*0.18, lines[0])
-                c.drawCentredString(cx_ans, text_y - row_h*0.10, lines[1])
+                c.setFillColor(text_main)
+                c.drawCentredString(cx_ans, text_y + row_h * 0.18, lines[0])
+                c.drawCentredString(cx_ans, text_y - row_h * 0.08, lines[1])
 
-            # 정답률 50% 미만 bold
-            rate_num = None
+            # 정답률: ✅ 50% 미만 굵게
+            is_low = False
             try:
-                rate_num = float(rate_val) if rate_val is not None else None
+                is_low = (acc_val is not None) and (float(acc_val) < 0.5)
             except:
-                rate_num = None
-
-            if rate_num is not None and rate_num < 0.5:
-                c.setFont("NanumGothic-Bold", base_font_size)
-            else:
-                c.setFont("NanumGothic", base_font_size)
+                is_low = False
 
             c.setFillColor(text_main)
-            c.drawCentredString(cx_wr, text_y, wr_txt)
+            c.setFont("NanumGothic-Bold" if is_low else "NanumGothic", base_font)
+            c.drawCentredString(cx_acc, text_y, acc_txt)
 
+            # Result
             ox_color = red if ox == "X" else green
             c.setFillColor(ox_color)
-            c.setFont("NanumGothic-Bold", 11)
-            c.drawCentredString(cx_ox, text_y, ox)
+            c.setFont("NanumGothic-Bold", 12)
+            c.drawCentredString(cx_res, text_y, ox)
 
-    # Analysis 문구 제거한 호출
-    draw_analysis_list(L, card_y, kpi_w, card_h, "Module 1", ans_m1, wr_m1, wrong_m1)
-    draw_analysis_list(L + kpi_w + gap, card_y, kpi_w, card_h, "Module 2", ans_m2, wr_m2, wrong_m2)
+    # ✅ “Analysis” 단어 제거
+    draw_table_card(L, card_y, kpi_w, card_h, "Module 1", ans_m1, wr_m1, wrong_m1)
+    draw_table_card(L + kpi_w + gap, card_y, kpi_w, card_h, "Module 2", ans_m2, wr_m2, wrong_m2)
+
+    # ===== Footer: 왼쪽 아래 Kakaotalk/Phone =====
+    c.setFillColor(text_main)
+    c.setFont("NanumGothic-Bold", 16)
+    c.drawString(L, 18 * mm, "Kakaotalk : yujinj524")
+    c.drawString(L, 10 * mm, "Phone : 010-6395-8733")
 
     c.showPage()
     c.save()
     return output_path
 
 # =========================================================
-# 메인 UI 구조
+# 메인 UI
 # =========================================================
 tab1, tab2, tab3 = st.tabs(["📝 오답노트 생성기", "✂️ 문제캡처 ZIP생성기", "📊 개인 성적표"])
 
-# ---------------------------------------------------------
-# [Tab 1] 오답노트 생성기
-# ---------------------------------------------------------
+# ----------------------
+# Tab 1
+# ----------------------
 with tab1:
     st.header("📝 SAT 오답노트 생성기")
 
-    if 'generated_files' not in st.session_state:
+    if "generated_files" not in st.session_state:
         st.session_state.generated_files = []
-    if 'zip_buffer' not in st.session_state:
+    if "zip_buffer" not in st.session_state:
         st.session_state.zip_buffer = None
-    if 'skipped_details' not in st.session_state:
+    if "skipped_details" not in st.session_state:
         st.session_state.skipped_details = {}
 
     st.markdown("---")
-    st.subheader("📊 예시 엑셀 양식")
+
     def example_input_df():
-        return pd.DataFrame({
-            '학생 이름': ['홍길동', '김철수', '이영희'],
-            '[M1] 점수': [100, 90, 100],
-            '[M1] 틀린 문제': ['1,3,5', 'X', 'X'],
-            '[M2] 점수': [95, 85, 100],
-            '[M2] 틀린 문제': ['X', '1,3', 'X']
-        })
+        return pd.DataFrame(
+            {
+                "학생 이름": ["홍길동", "김철수", "이영희"],
+                "[M1] 점수": [100, 90, 100],
+                "[M1] 틀린 문제": ["1,3,5", "X", "X"],
+                "[M2] 점수": [95, 85, 100],
+                "[M2] 틀린 문제": ["X", "1,3", "X"],
+            }
+        )
+
     with st.expander("예시 엑셀파일 미리보기 (클릭하여 열기)"):
         st.dataframe(example_input_df(), use_container_width=True)
 
-    st.markdown("---")
-    doc_title = st.text_input("문서 제목", value="Mock Test1", key="t1_title")
+    doc_title = st.text_input("문서 제목 (예: Mock Test1)", value="Mock Test1", key="t1_title")
 
     st.header("📦 파일 업로드")
     img_zip = st.file_uploader("m1, m2 폴더가 들어있는 ZIP 파일", type="zip", key="t1_zip")
@@ -861,7 +885,7 @@ with tab1:
 
     if st.button("🚀 오답노트 생성 시작", type="primary", key="t1_btn"):
         if not img_zip or not excel_file:
-            st.warning("⚠️ 이미지 ZIP 파일과 엑셀 파일을 모두 업로드해주세요.")
+            st.warning("⚠️ 파일들을 모두 업로드해주세요.")
         else:
             try:
                 m1_imgs, m2_imgs = extract_zip_to_dict(img_zip)
@@ -881,7 +905,7 @@ with tab1:
                 progress_bar = st.progress(0)
 
                 for idx, row in df.iterrows():
-                    name = row['이름']
+                    name = row["이름"]
 
                     def parse_module_data(x):
                         if pd.isna(x):
@@ -895,8 +919,8 @@ with tab1:
                         nums = [t.strip() for t in s.split(",") if t.strip()]
                         return nums if nums else []
 
-                    m1_data = parse_module_data(row['Module1'])
-                    m2_data = parse_module_data(row['Module2'])
+                    m1_data = parse_module_data(row["Module1"])
+                    m2_data = parse_module_data(row["Module2"])
 
                     skip_reason = None
                     if m1_data is None and m2_data is None:
@@ -932,6 +956,7 @@ with tab1:
                     st.success(f"✅ 총 {len(temp_files)}명의 오답노트 생성 완료!")
                 else:
                     st.warning("생성된 파일이 없습니다.")
+
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
@@ -943,56 +968,43 @@ with tab1:
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.markdown("**🏆 만점**")
-                        if st.session_state.skipped_details["만점"]:
-                            for n in st.session_state.skipped_details["만점"]:
-                                st.text(f"- {n}")
-                        else:
-                            st.caption("없음")
+                        for n in st.session_state.skipped_details["만점"]:
+                            st.text(f"- {n}")
                     with c2:
                         st.markdown("**⚠️ 하나 미제출**")
-                        if st.session_state.skipped_details["M1/M2 하나 미제출"]:
-                            for n in st.session_state.skipped_details["M1/M2 하나 미제출"]:
-                                st.text(f"- {n}")
-                        else:
-                            st.caption("없음")
+                        for n in st.session_state.skipped_details["M1/M2 하나 미제출"]:
+                            st.text(f"- {n}")
                     with c3:
                         st.markdown("**❌ 미제출**")
-                        if st.session_state.skipped_details["미제출"]:
-                            for n in st.session_state.skipped_details["미제출"]:
-                                st.text(f"- {n}")
-                        else:
-                            st.caption("없음")
+                        for n in st.session_state.skipped_details["미제출"]:
+                            st.text(f"- {n}")
 
-        st.markdown("---")
-        st.header("💾 다운로드")
         if st.session_state.zip_buffer:
             st.download_button(
                 "📦 전체 오답노트 ZIP 다운로드",
                 st.session_state.zip_buffer,
                 file_name=f"오답노트_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
                 mime="application/zip",
-                key="t1_down_all"
+                key="t1_down_all",
             )
 
-# ---------------------------------------------------------
-# [Tab 2] PDF 문제 자르기
-# ---------------------------------------------------------
+# ----------------------
+# Tab 2
+# ----------------------
 with tab2:
     st.header("✂️ 문제캡처 ZIP생성기")
-    st.info("SAT Mock PDF를 업로드하면 문제 번호를 인식하여 개별 PNG로 자르고 ZIP으로 정리합니다.")
-
+    st.info("SAT Mock PDF를 업로드하면 문제 번호를 인식하여 자릅니다.")
     pdf_file = st.file_uploader("PDF 파일 업로드", type=["pdf"], key="t2_pdf")
 
     c1, c2, c3, c4 = st.columns(4)
     zoom_val = c1.slider("해상도(zoom)", 2.0, 4.0, 3.0, 0.1, key="t2_zoom")
     pt_val = c2.slider("위 여백", 0, 140, 10, 1, key="t2_pt")
     pb_val = c3.slider("아래 여백", 0, 200, 12, 1, key="t2_pb")
-    frq_val = c4.slider("FRQ 아래 여백(px)", 0, 600, 250, 25, key="t2_frq")
-
-    unify_width = st.checkbox("모듈 내 가로폭을 가장 넓은 문제에 맞춤(오른쪽만 확장)", value=True, key="t2_chk")
+    frq_val = c4.slider("FRQ 여백", 0, 600, 250, 25, key="t2_frq")
+    unify_width = st.checkbox("가로폭 통일", value=True, key="t2_chk")
 
     if pdf_file and st.button("✂️ 자르기 & ZIP 생성", type="primary", key="t2_btn"):
-        with st.spinner("PDF 분석 및 이미지 생성 중..."):
+        with st.spinner("이미지 생성 중..."):
             try:
                 pdf_bytes = pdf_file.read()
                 pdf_name = pdf_file.name
@@ -1014,20 +1026,20 @@ with tab2:
                     unify_width_right=unify_width,
                 )
 
-                st.success(f"✅ 완료! (총 {len(rects_data)}문제 추출)")
+                st.success(f"✅ 완료! (총 {len(rects_data)}문제)")
                 st.download_button(
                     "📦 ZIP 다운로드",
                     data=zbuf_data,
                     file_name=zname,
                     mime="application/zip",
-                    key="t2_down"
+                    key="t2_down",
                 )
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
-# ---------------------------------------------------------
-# [Tab 3] 개인 성적표
-# ---------------------------------------------------------
+# ----------------------
+# Tab 3
+# ----------------------
 with tab3:
     st.header("📊 개인 성적표")
     st.info("ETA.xlsx (Student Analysis + QuizResults + Accuracy/Error Analysis) + Mock데이터.xlsx")
@@ -1044,73 +1056,55 @@ with tab3:
     STUDENT_SHEET = "Student Analysis"
     QUIZ_SHEET = "QuizResults"
 
-    # Student Analysis 헤더 규칙(2행)
-    SA_HEADER_ROW_IDX = 1
-    SA_NAME_COL = "학생 이름"
-
-    # QuizResults 고정 컬럼
-    QZ_KEYWORD_COL = "검색 키워드"
-    QZ_MODULE_COL  = "모듈"
-    QZ_NAME_COL    = "학생 이름"
-    QZ_DT_COL      = "응답 날짜"
-    QZ_TIME_COL    = "소요 시간"
-    QZ_SCORE_COL   = "점수"
-    QZ_WRONG_COL   = "틀린 문제 번호"
-
     if st.button("🚀 개인 성적표 생성", type="primary", key="t3_btn"):
         if not eta_file or not mock_file:
-            st.warning("⚠️ ETA.xlsx와 Mock데이터.xlsx를 모두 업로드해주세요.")
+            st.warning("⚠️ 파일 2개를 모두 업로드해주세요.")
             st.stop()
         if not font_ready:
-            st.error("⚠️ fonts 폴더에 NanumGothic.ttf / NanumGothicBold.ttf가 필요합니다.")
+            st.error("⚠️ fonts 폴더에 폰트 파일이 필요합니다.")
             st.stop()
 
         try:
             eta_xl = pd.ExcelFile(eta_file)
 
-            # ---- Student Analysis ----
+            # 1) Student Analysis
             if STUDENT_SHEET not in eta_xl.sheet_names:
-                st.error(f"⚠️ ETA.xlsx에 '{STUDENT_SHEET}' 시트가 없습니다.")
+                st.error(f"'{STUDENT_SHEET}' 시트가 없습니다.")
                 st.stop()
 
             raw_sa = pd.read_excel(eta_xl, sheet_name=STUDENT_SHEET, header=None)
-            if raw_sa.shape[0] <= SA_HEADER_ROW_IDX:
-                st.error("⚠️ Student Analysis에서 2행(헤더)을 찾을 수 없습니다.")
+            if raw_sa.shape[0] <= 1:
+                st.error("Student Analysis 데이터 부족")
                 st.stop()
 
-            sa_header = raw_sa.iloc[SA_HEADER_ROW_IDX].astype(str).tolist()
-            student_df = raw_sa.iloc[SA_HEADER_ROW_IDX + 1:].copy()
+            sa_header = raw_sa.iloc[1].astype(str).tolist()  # 2행 헤더
+            student_df = raw_sa.iloc[2:].copy()
             student_df.columns = sa_header
             student_df = student_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
 
+            SA_NAME_COL = "학생 이름"
             assert_columns(student_df, [SA_NAME_COL], STUDENT_SHEET)
 
-            students = [_clean(x) for x in student_df[SA_NAME_COL].dropna().tolist()]
-            students = [s for s in students if s != ""]
+            students = [_clean(x) for x in student_df[SA_NAME_COL].dropna().tolist() if _clean(x)]
             if not students:
                 st.error("학생 목록이 비어있습니다.")
                 st.stop()
 
-            # ---- QuizResults ----
+            # 2) QuizResults
             if QUIZ_SHEET not in eta_xl.sheet_names:
-                st.error(f"⚠️ ETA.xlsx에 '{QUIZ_SHEET}' 시트가 없습니다.")
+                st.error(f"'{QUIZ_SHEET}' 시트가 없습니다.")
                 st.stop()
 
             quiz_df = pd.read_excel(eta_xl, sheet_name=QUIZ_SHEET, header=0)
             quiz_df.columns = [str(c).strip() for c in quiz_df.columns]
-            quiz_df = quiz_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
-
-            assert_columns(
-                quiz_df,
-                [QZ_KEYWORD_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
-                QUIZ_SHEET
-            )
+            QZ_COLS = ["검색 키워드", "모듈", "학생 이름", "응답 날짜", "소요 시간", "점수", "틀린 문제 번호"]
+            assert_columns(quiz_df, QZ_COLS, QUIZ_SHEET)
 
             quiz_map = {}
             for _, r in quiz_df.iterrows():
-                nm = _clean(r.get(QZ_NAME_COL, ""))
-                md = _clean(r.get(QZ_MODULE_COL, "")).upper()
-                if nm == "":
+                nm = _clean(r.get("학생 이름", ""))
+                md = _clean(r.get("모듈", "")).upper()
+                if not nm:
                     continue
 
                 if md in ["M1", "MODULE1", "1"]:
@@ -1121,14 +1115,14 @@ with tab3:
                     continue
 
                 quiz_map.setdefault(nm, {})[mod] = {
-                    "dt": _clean(r.get(QZ_DT_COL, "")) or "-",
-                    "time": _clean(r.get(QZ_TIME_COL, "")) or "-",
-                    "score": score_to_slash22(r.get(QZ_SCORE_COL, "")),
-                    "wrong_set": parse_wrong_list(r.get(QZ_WRONG_COL, "")),
-                    "keyword": _clean(r.get(QZ_KEYWORD_COL, "")) or "",
+                    "dt": _clean(r.get("응답 날짜", "")) or "-",
+                    "time": _clean(r.get("소요 시간", "")) or "-",
+                    "score": score_to_slash22(r.get("점수", "")),
+                    "wrong_set": parse_wrong_list(r.get("틀린 문제 번호", "")),
+                    "keyword": _clean(r.get("검색 키워드", "")) or "",
                 }
 
-            # ---- Accuracy Sheet 선택 ----
+            # 3) Accuracy/Error Analysis (정답률)
             target_sheet_name = None
             if "Accuracy Analysis" in eta_xl.sheet_names:
                 target_sheet_name = "Accuracy Analysis"
@@ -1136,14 +1130,13 @@ with tab3:
                 target_sheet_name = "Error Analysis"
 
             if target_sheet_name:
-                wr1, wr2 = build_accuracy_dict_fixed_ranges(eta_xl, target_sheet_name)
+                wr1, wr2 = build_wrong_rate_dict_fixed_ranges(eta_xl, target_sheet_name)
             else:
                 wr1, wr2 = {}, {}
 
-            # ---- Mock 정답 ----
+            # 4) Mock answers
             ans1, ans2 = read_mock_answers(mock_file)
 
-            # ---- PDF 생성 ----
             output_dir = "generated_reports"
             os.makedirs(output_dir, exist_ok=True)
 
@@ -1156,25 +1149,24 @@ with tab3:
                 m1 = q.get(1, {})
                 m2 = q.get(2, {})
 
-                m1_score_txt = _clean(m1.get("score", ""))
-                m2_score_txt = _clean(m2.get("score", ""))
+                m1_score = _clean(m1.get("score", ""))
+                m2_score = _clean(m2.get("score", ""))
 
-                # M1/M2 점수 둘 중 하나라도 blank면 제외
-                if m1_score_txt == "" or m2_score_txt == "":
+                # 점수 blank면 제외
+                if m1_score == "" or m2_score == "":
                     skipped.append(stu)
                     prog.progress((i + 1) / len(students))
                     continue
 
                 subtitle_kw = _clean(m1.get("keyword", "")) or _clean(m2.get("keyword", "")) or "-"
 
-                m1_meta = {"score": m1_score_txt, "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
-                m2_meta = {"score": m2_score_txt, "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
+                m1_meta = {"score": m1_score, "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
+                m2_meta = {"score": m2_score, "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
 
                 wrong1 = set(m1.get("wrong_set", set()))
                 wrong2 = set(m2.get("wrong_set", set()))
 
                 pdf_path = os.path.join(output_dir, f"{stu}_{generated_date.strftime('%Y%m%d')}.pdf")
-
                 create_report_pdf_reportlab(
                     output_path=pdf_path,
                     title=report_title,
@@ -1195,11 +1187,9 @@ with tab3:
                 prog.progress((i + 1) / len(students))
 
             if not made_files:
-                st.warning("생성된 PDF가 없습니다. (QuizResults 점수 blank로 모두 제외되었을 수 있어요)")
+                st.warning("생성된 PDF가 없습니다.")
                 if skipped:
-                    with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
-                        for s in skipped:
-                            st.write(f"- {s}")
+                    st.write("제외된 학생:", skipped)
                 st.stop()
 
             zip_buf = io.BytesIO()
@@ -1210,19 +1200,13 @@ with tab3:
             zip_buf.seek(0)
 
             st.success(f"✅ 생성 완료: {len(made_files)}명 (제외: {len(skipped)}명)")
-            if skipped:
-                with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
-                    for s in skipped:
-                        st.write(f"- {s}")
-
             st.download_button(
                 "📦 개인 성적표 ZIP 다운로드",
                 data=zip_buf,
                 file_name=f"개인성적표_{generated_date.strftime('%Y%m%d')}.zip",
                 mime="application/zip",
-                key="t3_download_zip"
+                key="t3_download_zip",
             )
 
         except Exception as e:
             st.error(f"오류 발생: {e}")
-            st.exception(e)
