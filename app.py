@@ -840,7 +840,8 @@ with tab3:
             return "-"
 
     # -------------------------------------------------------------
-    # [수정된 함수] 제목 제거, 테이블 위로 이동, 헤더 축소 적용됨
+    # [수정된 함수] 제목 제거, 테이블 위로 이동, 헤더 축소, KPI 줄 제거,
+    #              **헤더와 1행 사이 간격 축소**
     # -------------------------------------------------------------
     def create_report_pdf_reportlab(
         output_path: str,
@@ -932,11 +933,6 @@ with tab3:
             c.setFont("NanumGothic-Bold", 28)
             c.drawRightString(x + w - 8*mm, y + h - 16.5*mm, str(score))
 
-            mid_y = y + 10.5*mm
-            c.setLineWidth(0.6)
-            c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
-            c.line(x + 6*mm, mid_y, x + w - 6*mm, mid_y)
-
             c.setFillColor(muted)
             c.setFont("NanumGothic", 8)
             c.drawString(x + 8*mm, y + 4.8*mm, f"{dt}")
@@ -963,11 +959,6 @@ with tab3:
 
         def draw_table(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
             draw_round_rect(c, x, y, w, h, 10*mm, colors.white, stroke, 1)
-
-            # [삭제] 제목 그리기 코드 제거
-            # c.setFillColor(title_col)
-            # c.setFont("NanumGothic-Bold", 14)
-            # c.drawString(x + 9*mm, y + h - 12*mm, module_name)
 
             # [수정] 헤더 위치 조정
             strip_y = y + h - top_padding - header_h
@@ -1001,7 +992,8 @@ with tab3:
             c.drawCentredString(wr_center, header_text_y, "정답률")
             c.drawCentredString(res_center, header_text_y, "Result")
 
-            start_y = strip_y - 2.0*mm - row_h
+            # [수정] 헤더와 1행 사이 간격 축소 (2.0mm -> 0.5mm)
+            start_y = strip_y - 0.5*mm - row_h
             base = 1.35 * mm
 
             for i, q in enumerate(range(1, 23)):
