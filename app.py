@@ -594,14 +594,13 @@ def create_report_pdf_reportlab(
     line_y = TOP - 18*mm
     c.line(L, line_y, W - R, line_y)
 
-    # 2. KPI 영역 (겹침 방지)  ✅ 여기만 수정
-    # 구분선(line_y) 바로 아래에 KPI가 오도록: "bottom y"를 계산해줌
+# 2. KPI 영역 (겹침 방지)
     kpi_h = 40*mm
     gap = 8*mm
     kpi_w = (usable_w - gap) / 2
 
-    kpi_gap_from_line = 6*mm  # 구분선과 KPI 사이 간격
-    kpi_y = line_y - kpi_gap_from_line - kpi_h  # ✅ (중요) KPI의 bottom y
+    kpi_gap_from_line = 6*mm
+    kpi_y = line_y - kpi_gap_from_line - kpi_h  # KPI bottom y
 
     def draw_kpi_simple(x, y, w, h, label, score, dt, t):
         c.setLineWidth(0.5)
@@ -630,9 +629,13 @@ def create_report_pdf_reportlab(
     draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1 Results", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
     draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-        # 3. 상세 분석 카드 시작점도 KPI 아래로 자연스럽게
-    cards_top = kpi_y - 8*mm
-    card_y = cards_top - card_h
+# 3. 상세 분석 카드 시작점 (KPI 아래)
+    cards_gap_from_kpi = 8*mm
+    cards_top = kpi_y - cards_gap_from_kpi
+
+    card_h = 190*mm          # ✅ 먼저 정의
+    card_y = cards_top - card_h  # ✅ 그 다음 계산
+
 
     def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
         c.setLineWidth(0.5)
