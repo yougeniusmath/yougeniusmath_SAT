@@ -733,14 +733,17 @@ with tab3:
                 pass
         return out
 
-    def wr_to_text(v):
-        """0%면 '-'"""
+        def wr_to_text(v):
+        """
+        정답률 표시용 함수
+        - None이면 '-'
+        - 0% ~ 100% 모두 표시 (지우지 않음)
+        """
         if v is None:
             return "-"
         try:
             v = float(v)
-            if abs(v) < 1e-12:
-                return "-"
+            # [수정] 정답률이므로 0%도 100%도 모두 의미가 있음. 무조건 표시.
             return f"{int(round(v * 100))}%"
         except:
             return "-"
@@ -761,7 +764,7 @@ with tab3:
             st.write(f"현재 {label} 컬럼:", list(df.columns))
             st.stop()
 
-    # ✅ Error Analysis 오답률 고정 범위: M1=C3:C24, M2=C26:C47
+    # ✅ Error Analysis 정답률 고정 범위: M1=C3:C24, M2=C26:C47
     def build_wrong_rate_dict_fixed_ranges(eta_xl):
         df = pd.read_excel(eta_xl, sheet_name=ERROR_SHEET, header=None)
         colC = df.iloc[:, 2].tolist()  # C열
@@ -871,201 +874,222 @@ with tab3:
         c.drawString(x_center - tw/2, y_baseline, text)
 
     def create_report_pdf_reportlab(
-        output_path: str,
-        title: str,
-        subtitle: str,
-        gen_date_str: str,
-        student_name: str,
-        m1_meta: dict,
-        m2_meta: dict,
-        ans_m1: dict,
-        ans_m2: dict,
-        wr_m1: dict,
-        wr_m2: dict,
-        wrong_m1: set,
-        wrong_m2: set,
-    ):
-        ensure_fonts_registered()
-        c = canvas.Canvas(output_path, pagesize=A4)
-        W, H = A4
+    output_path: str,
+    title: str,
+    subtitle: str,
+    gen_date_str: str,
+    student_name: str,
+    m1_meta: dict,
+    m2_meta: dict,
+    ans_m1: dict,
+    ans_m2: dict,
+    wr_m1: dict,
+    wr_m2: dict,
+    wrong_m1: set,
+    wrong_m2: set,
+):
+    ensure_fonts_registered()
+    c = canvas.Canvas(output_path, pagesize=A4)
+    W, H = A4
 
-        bg = colors.Color(248/255, 250/255, 252/255)
-        stroke = colors.Color(226/255, 232/255, 240/255)
-        muted = colors.Color(71/255, 85/255, 105/255)
-        title_col = colors.Color(15/255, 23/255, 42/255)
-        pill_fill = colors.Color(241/255, 245/255, 249/255)
-        stripe = colors.Color(248/255, 250/255, 252/255)
-        green = colors.Color(22/255, 101/255, 52/255)
-        red = colors.Color(153/255, 27/255, 27/255)
+    # === [디자인 컬러 팔레트: 인쇄 친화적 화이트톤] ===
+    # 배경은 칠하지 않음 (기본 흰색)
+    stroke = colors.Color(203/255, 213/255, 225/255)  # 연한 회색 테두리
+    header_line = colors.Color(30/255, 41/255, 59/255) # 진한 네이비 (구분선)
+    
+    # 텍스트 컬러
+    text_main = colors.Color(15/255, 23/255, 42/255)   # 거의 검정
+    text_sub = colors.Color(100/255, 116/255, 139/255) # 연한 회색 텍스트
+    
+    # 정오 표시 컬러
+    green = colors.Color(22/255, 101/255, 52/255)
+    red = colors.Color(220/255, 38/255, 38/255)       # 조금 더 선명한 빨강
+    
+    # 테이블 행 배경 (가독성을 위한 아주 연한 줄무늬)
+    row_stripe = colors.Color(248/255, 250/255, 252/255) 
 
-        # background
-        c.setFillColor(bg)
-        c.rect(0, 0, W, H, stroke=0, fill=1)
+    # 여백 설정
+    L = 15*mm
+    R = 15*mm
+    TOP = H - 15*mm
+    usable_w = W - L - R
 
-        L = 16*mm
-        R = 16*mm
-        TOP = H - 12*mm          # ✅ 윗여백 줄임
-        usable_w = W - L - R
+    # 1. 문서 헤더 (심플하게 텍스트와 하단 라인만 사용)
+    c.setFillColor(text_sub)
+    c.setFont("NanumGothic", 9)
+    c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
-        # Generated
-        c.setFont("NanumGothic", 9.5)
-        c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-        c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
+    # 메인 타이틀
+    c.setFillColor(text_main)
+    c.setFont("NanumGothic-Bold", 24)
+    c.drawString(L, TOP - 10*mm, title)
 
-        # ===== Header (one big card) =====
-        header_h = 30*mm
-        header_y = TOP - 5*mm - header_h
-        draw_round_rect(c, L, header_y, usable_w, header_h, 9*mm, colors.white, stroke, 1)
+    # 부제 (키워드)
+    c.setFillColor(text_sub)
+    c.setFont("NanumGothic", 12)
+    c.drawString(L, TOP - 17*mm, subtitle)
 
-        c.setFillColor(title_col)
-        c.setFont("NanumGothic-Bold", 25)
-        c.drawString(L + 10*mm, header_y + header_h - 14*mm, title)
+    # 학생 이름 (오른쪽에 크게 배치)
+    c.setFillColor(text_main)
+    c.setFont("NanumGothic-Bold", 16)
+    c.drawRightString(W - R, TOP - 10*mm, student_name)
+    
+    # 헤더 구분선 (굵게)
+    c.setLineWidth(1.5)
+    c.setStrokeColor(header_line)
+    line_y = TOP - 22*mm
+    c.line(L, line_y, W - R, line_y)
 
-        c.setFillColor(muted)
-        c.setFont("NanumGothic", 13)
-        c.drawString(L + 10*mm, header_y + header_h - 23*mm, subtitle)
+    # 2. KPI 영역 (Module 1 / Module 2 점수)
+    kpi_y = line_y - 10*mm
+    kpi_h = 25*mm
+    gap = 8*mm
+    kpi_w = (usable_w - gap) / 2
 
-        pill_w = 62*mm
-        pill_h = 16*mm
-        pill_x = L + usable_w - pill_w - 10*mm
-        pill_y = header_y + (header_h - pill_h)/2
-        draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 7*mm, pill_fill, stroke, 1)
+    def draw_kpi_simple(x, y, w, h, label, score, dt, t):
+        # 외곽선 박스
+        c.setLineWidth(0.5)
+        c.setStrokeColor(stroke)
+        c.setFillColor(colors.white)
+        c.roundRect(x, y, w, h, 3*mm, fill=1, stroke=1)
+        
+        # 라벨 (Module 1)
+        c.setFillColor(text_sub)
+        c.setFont("NanumGothic-Bold", 10)
+        c.drawString(x + 5*mm, y + h - 8*mm, label)
+        
+        # 점수 (크게)
+        c.setFillColor(text_main)
+        c.setFont("NanumGothic-Bold", 20)
+        c.drawRightString(x + w - 5*mm, y + h - 10*mm, str(score))
+        
+        # 하단 정보 (날짜/시간) - 구분선 추가
+        c.setLineWidth(0.5)
+        c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
+        c.line(x + 3*mm, y + 9*mm, x + w - 3*mm, y + 9*mm)
+        
+        c.setFillColor(text_sub)
+        c.setFont("NanumGothic", 9)
+        c.drawString(x + 5*mm, y + 4*mm, f"Date: {dt}")
+        c.drawRightString(x + w - 5*mm, y + 4*mm, f"Time: {t}")
 
-        c.setFillColor(colors.Color(100/255, 116/255, 139/255))
-        c.setFont("NanumGothic-Bold", 9.5)
-        c.drawString(pill_x + 6*mm, pill_y + 9.8*mm, "Name")
+    draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1 Results", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
+    draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-        c.setFillColor(colors.Color(2/255, 6/255, 23/255))
-        max_name_w = pill_w - 22*mm
-        name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 9.5, max_name_w)
-        c.setFont("NanumGothic-Bold", name_fs)
-        c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
+    # 3. 상세 분석 카드 (Analysis Cards)
+    # KPI 바로 아래부터 시작
+    cards_top = kpi_y - 8*mm 
+    card_h = 200*mm # 충분히 길게
+    card_y = cards_top - card_h
 
-        # ===== KPI =====
-        kpi_h = 21 * mm
-        gap = 5 * mm
-        kpi_w = (usable_w - gap) / 2
-        kpi_y = header_y - 5 * mm - kpi_h  # ✅ 간격 줄임
+    def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
+        # 전체 외곽선 (둥근 모서리 없이 깔끔하게, 혹은 아주 살짝 둥글게)
+        c.setLineWidth(0.5)
+        c.setStrokeColor(stroke)
+        c.rect(x, y, w, h, stroke=1, fill=0)
+        
+        # 헤더 바 (네이비색 배경으로 강조)
+        header_h = 10*mm
+        c.setFillColor(header_line)
+        c.rect(x, y + h - header_h, w, header_h, stroke=0, fill=1)
+        
+        c.setFillColor(colors.white)
+        c.setFont("NanumGothic-Bold", 11)
+        c.drawCentredString(x + w/2, y + h - 6.5*mm, module_name)
+        
+        # 내부 컬럼 헤더
+        sub_header_y = y + h - header_h - 8*mm
+        
+        col_q = 10*mm
+        col_wr = 14*mm
+        col_ox = 10*mm
+        col_ans = w - (col_q + col_wr + col_ox) # 나머지 공간
+        
+        # X 좌표 계산
+        cx_q = x + col_q/2
+        cx_ans = x + col_q + col_ans/2
+        cx_wr = x + col_q + col_ans + col_wr/2
+        cx_ox = x + col_q + col_ans + col_wr + col_ox/2
+        
+        c.setFillColor(text_sub)
+        c.setFont("NanumGothic-Bold", 9)
+        c.drawCentredString(cx_q, sub_header_y, "No.")
+        c.drawCentredString(cx_ans, sub_header_y, "Answer")
+        c.drawCentredString(cx_wr, sub_header_y, "정답률") # [변경] 오답률 -> 정답률
+        c.drawCentredString(cx_ox, sub_header_y, "Result")
+        
+        # 구분선
+        c.setStrokeColor(stroke)
+        c.line(x + 2*mm, sub_header_y - 3*mm, x + w - 2*mm, sub_header_y - 3*mm)
+        
+        # 데이터 리스트
+        row_h = 7.5*mm # 행 높이 약간 여유있게
+        start_y = sub_header_y - 3*mm - row_h
+        
+        base_font_size = 10
+        
+        for i, q in enumerate(range(1, 23)):
+            ry = start_y - i * row_h
+            
+            # 줄무늬 배경 (짝수행만)
+            if q % 2 == 0:
+                c.setFillColor(row_stripe)
+                c.rect(x + 0.5, ry, w - 1, row_h, stroke=0, fill=1)
+            
+            # 데이터 준비
+            ans_raw = _clean(ans_dict.get(q, ""))
+            # 정답률 표시 (값이 없으면 -)
+            rate_val = wr_dict.get(q, None)
+            wr_txt = wr_to_text(rate_val) # 수정된 wr_to_text 사용
 
-        def draw_kpi_card(x, y, label, score_txt, dt, t):
-            draw_round_rect(c, x, y, kpi_w, kpi_h, 8 * mm, colors.white, stroke, 1)
+            ox = "X" if q in wrong_set else "O"
+            
+            # 텍스트 그리기 (수직 중앙 정렬)
+            text_y = ry + 2.5*mm
+            
+            # 1. 문제 번호
+            c.setFillColor(text_main)
+            c.setFont("NanumGothic", base_font_size)
+            c.drawCentredString(cx_q, text_y, str(q))
+            
+            # 2. 정답 (긴 텍스트 처리)
+            lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
+            lines = [ln.strip() for ln in lines if ln.strip() != ""]
+            if not lines: lines = [""]
+            
+            # 긴 텍스트 폰트 조절
+            c.setFillColor(text_main)
+            avail_w = col_ans - 2*mm
+            
+            if len(lines) == 1:
+                fs = fit_font_size(lines[0], "NanumGothic-Bold", base_font_size, 7, avail_w)
+                c.setFont("NanumGothic-Bold", fs)
+                c.drawCentredString(cx_ans, text_y, lines[0])
+            else:
+                # 2줄인 경우
+                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 9, 6, avail_w)
+                c.setFont("NanumGothic-Bold", fs)
+                c.drawCentredString(cx_ans, text_y + 1.5*mm, lines[0])
+                c.drawCentredString(cx_ans, text_y - 1.5*mm, lines[1])
+            
+            # 3. 정답률 (Accuracy)
+            # 100%는 굵게, 나머지는 일반
+            c.setFont("NanumGothic", base_font_size)
+            c.setFillColor(text_main)
+            c.drawCentredString(cx_wr, text_y, wr_txt)
+            
+            # 4. 정오 (O/X)
+            ox_color = red if ox == "X" else green
+            c.setFillColor(ox_color)
+            c.setFont("NanumGothic-Bold", 11)
+            c.drawCentredString(cx_ox, text_y, ox)
 
-            c.setFillColor(colors.Color(2/255, 6/255, 23/255))
-            c.setFont("NanumGothic-Bold", 11.5)
-            c.drawString(x + 6 * mm, y + kpi_h - 8.2 * mm, label)
+    draw_analysis_list(L, card_y, kpi_w, card_h, "Module 1 Analysis", ans_m1, wr_m1, wrong_m1)
+    draw_analysis_list(L + kpi_w + gap, card_y, kpi_w, card_h, "Module 2 Analysis", ans_m2, wr_m2, wrong_m2)
 
-            # ✅ 점수 더 위로
-            c.setFont("NanumGothic-Bold", 18)
-            c.setFillColor(title_col)
-            c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 11.4 * mm, str(score_txt))
-
-            # ✅ 라벨 제거 -> 값만
-            c.setFont("NanumGothic", 9)
-            c.setFillColor(muted)
-            c.drawString(x + 6 * mm, y + 3.8 * mm, f"{dt}")
-            c.drawRightString(x + kpi_w - 6 * mm, y + 3.8 * mm, f"{t}")
-
-        draw_kpi_card(L, kpi_y, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
-        draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
-
-        # ===== 분석 제목 제거 =====
-        # (공간 확보용)
-
-        # ===== Analysis cards =====
-        # ✅ 카드 시작을 KPI 바로 밑으로
-        cards_top = kpi_y - 4*mm
-
-        # ✅ 카드 높이 충분히 크게 (22문항 절대 안 잘리게)
-        card_h = 170*mm
-
-        card_w = (usable_w - gap) / 2
-        left_x = L
-        right_x = L + card_w + gap
-        card_y = cards_top - card_h
-
-        def draw_analysis_card(x, y, title_txt, ans_dict, wr_dict, wrong_set):
-            draw_round_rect(c, x, y, card_w, card_h, 10*mm, colors.white, stroke, 1)
-
-            # Title inside card
-            c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 14.5)
-            c.drawString(x + 9*mm, y + card_h - 11.8*mm, title_txt)
-
-            # Header strip (작게)
-            strip_h = 8.5*mm
-            strip_y = y + card_h - 23.2*mm
-            draw_round_rect(c, x + 6*mm, strip_y, card_w - 12*mm, strip_h, 6*mm, pill_fill, stroke, 1)
-
-            inner_x = x + 8*mm
-            inner_w = card_w - 16*mm
-
-            col_q = 11*mm
-            col_wr = 16*mm
-            col_ox = 12*mm
-            col_ans = inner_w - (col_q + col_wr + col_ox)
-
-            q_center = inner_x + col_q/2
-            ans_center = inner_x + col_q + col_ans/2
-            wr_center = inner_x + col_q + col_ans + col_wr/2
-            ox_center = inner_x + col_q + col_ans + col_wr + col_ox/2
-
-            header_y = strip_y + 2.4*mm
-            draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 9.6, muted)
-            draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 9.6, muted)
-            draw_text_center(c, wr_center, header_y, "오답률", "NanumGothic-Bold", 9.6, muted)
-            draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 9.6, muted)
-
-            # ✅ row 더 촘촘하게
-            row_h = 6.0*mm
-            row_gap = 0.45*mm
-            start_y = strip_y - 1.8*mm - row_h
-
-            base = 1.55*mm  # baseline
-
-            for i, q in enumerate(range(1, 23)):
-                ry = start_y - i*(row_h + row_gap)
-
-                fill = stripe if (q % 2 == 0) else colors.white
-                c.setFillColor(fill)
-                c.setStrokeColor(fill)
-                c.roundRect(x + 6*mm, ry, card_w - 12*mm, row_h, 6*mm, fill=1, stroke=0)
-
-                ans_raw = _clean(ans_dict.get(q, ""))
-                lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
-                lines = [ln.strip() for ln in lines if ln.strip() != ""]
-                if not lines: lines = [""]
-
-                # 2줄 이상이면 2줄까지만 (원본이 2줄이면 그대로)
-                if len(lines) > 2:
-                    lines = [lines[0], " ".join(lines[1:])]
-
-                wr_txt = wr_to_text(wr_dict.get(q, None))
-                ox = "X" if q in wrong_set else "O"
-
-                # Q / WR / OX 폰트 더 줄임
-                draw_text_center(c, q_center,  ry + base, str(q), "NanumGothic", 10.2, title_col)
-
-                # Answer: 길면 같은 셀에서 자동 축소 (2줄이면 2줄 모두 같은 폰트 크기)
-                ans_max_w = col_ans - 3.0*mm
-                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 10.4, 6.6, ans_max_w)
-
-                if len(lines) == 1:
-                    draw_text_center(c, ans_center, ry + base, lines[0], "NanumGothic-Bold", fs, title_col)
-                else:
-                    draw_text_center(c, ans_center, ry + (base + 0.85*mm), lines[0], "NanumGothic-Bold", fs, title_col)
-                    draw_text_center(c, ans_center, ry + (base - 0.65*mm), lines[1], "NanumGothic-Bold", fs, title_col)
-
-                draw_text_center(c, wr_center, ry + base, wr_txt, "NanumGothic", 10.2, title_col)
-
-                ox_color = red if ox == "X" else green
-                draw_text_center(c, ox_center, ry + base, ox, "NanumGothic-Bold", 11.6, ox_color)
-
-        draw_analysis_card(left_x, card_y, "Module 1", ans_m1, wr_m1, wrong_m1)
-        draw_analysis_card(right_x, card_y, "Module 2", ans_m2, wr_m2, wrong_m2)
-
-        c.showPage()
-        c.save()
-        return output_path
+    c.showPage()
+    c.save()
+    return output_path
 
     # =========================
     # Run
