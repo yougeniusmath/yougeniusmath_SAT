@@ -532,194 +532,204 @@ def fit_font_size_two_lines(lines, font_name, max_size, min_size, max_width):
         need = min(need, fit_font_size(ln, font_name, max_size, min_size, max_width))
     return need
 
-def create_report_pdf_reportlab(
-    output_path: str,
-    title: str,
-    subtitle: str,
-    gen_date_str: str,
-    student_name: str,
-    m1_meta: dict,
-    m2_meta: dict,
-    ans_m1: dict,
-    ans_m2: dict,
-    wr_m1: dict,
-    wr_m2: dict,
-    wrong_m1: set,
-    wrong_m2: set,
-):
-    ensure_fonts_registered()
-    c = canvas.Canvas(output_path, pagesize=A4)
-    W, H = A4
+# =========================
+# Header + KPI + Tables  (교체 블록)
+# =========================
 
-    # === [디자인 컬러 팔레트] ===
-    stroke = colors.Color(203/255, 213/255, 225/255)
-    header_line = colors.Color(30/255, 41/255, 59/255)
-    text_main = colors.Color(15/255, 23/255, 42/255)
-    text_sub = colors.Color(100/255, 116/255, 139/255)
-    green = colors.Color(22/255, 101/255, 52/255)
-    red = colors.Color(220/255, 38/255, 38/255)
-    row_stripe = colors.Color(248/255, 250/255, 252/255)
-    
-    # [확인용] 제목을 진한 파란색(Navy)으로 설정 (업데이트 확인용)
-    title_color = colors.Color(25/255, 25/255, 112/255) 
+# 여백
+L = 15*mm
+R = 15*mm
+TOP = H - 30*mm
+usable_w = W - L - R
 
-    # 여백 설정 (기존보다 훨씬 넓게 잡음)
-    L = 15*mm
-    R = 15*mm
-    TOP = H - 30*mm  # [변경] 상단 여백 대폭 확대 (제목 잘림 방지)
-    usable_w = W - L - R
+# ---- Header (제목/부제) ----
+c.setFillColor(text_sub)
+c.setFont("NanumGothic", 9)
+c.drawRightString(W - R, TOP + 5*mm, f"Generated: {gen_date_str}")
 
-    # 1. 문서 헤더
-    # 날짜와 이름을 분리하여 배치
-    c.setFillColor(text_sub)
-    c.setFont("NanumGothic", 9)
-    c.drawRightString(W - R, TOP + 5*mm, f"Generated: {gen_date_str}")
+# 제목 (예전 느낌: 네이비 강조 제거, 굵고 큼)
+c.setFillColor(text_main)
+c.setFont("NanumGothic-Bold", 28)
+c.drawString(L, TOP, title)
+
+c.setFillColor(text_sub)
+c.setFont("NanumGothic", 13)
+c.drawString(L, TOP - 11*mm, subtitle)
+
+# ---- Name pill (왼쪽 이미지 스타일) ----
+pill_w = 70*mm
+pill_h = 16*mm
+pill_x = W - R - pill_w
+pill_y = TOP - 10*mm
+
+c.setLineWidth(0.8)
+c.setStrokeColor(stroke)
+c.setFillColor(colors.Color(241/255, 245/255, 249/255))  # pill_fill
+c.roundRect(pill_x, pill_y, pill_w, pill_h, 7*mm, fill=1, stroke=1)
+
+c.setFillColor(text_sub)
+c.setFont("NanumGothic-Bold", 10)
+c.drawString(pill_x + 6*mm, pill_y + 5.6*mm, "Name")
+
+c.setFillColor(text_main)
+max_name_w = pill_w - 22*mm
+name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 10, max_name_w)
+c.setFont("NanumGothic-Bold", name_fs)
+c.drawRightString(pill_x + pill_w - 6*mm, pill_y + 4.2*mm, student_name)
+
+# ---- Divider line ----
+c.setLineWidth(1.5)
+c.setStrokeColor(header_line)
+line_y = TOP - 18*mm
+c.line(L, line_y, W - R, line_y)
+
+# ---- KPI (예전 스타일: Module 1/2, score 크게, 아래 값만) ----
+kpi_h = 34*mm
+gap = 8*mm
+kpi_w = (usable_w - gap) / 2
+
+kpi_gap_from_line = 6*mm
+kpi_y = line_y - kpi_gap_from_line - kpi_h  # KPI bottom y
+
+def draw_kpi_simple(x, y, w, h, label, score, dt, t):
+    c.setLineWidth(0.8)
+    c.setStrokeColor(stroke)
+    c.setFillColor(colors.white)
+    c.roundRect(x, y, w, h, 7*mm, fill=1, stroke=1)
 
     c.setFillColor(text_main)
     c.setFont("NanumGothic-Bold", 14)
-    c.drawRightString(W - R, TOP - 5*mm, student_name)
+    c.drawString(x + 7*mm, y + h - 9*mm, label)
 
-    # 타이틀 (업데이트 확인을 위해 파란색 적용)
-    c.setFillColor(title_color) 
+    c.setFillColor(text_main)
     c.setFont("NanumGothic-Bold", 26)
-    c.drawString(L, TOP, title)
+    c.drawRightString(x + w - 7*mm, y + h - 12*mm, str(score))
 
     c.setFillColor(text_sub)
-    c.setFont("NanumGothic", 12)
-    c.drawString(L, TOP - 10*mm, subtitle)
-    
-    # 구분선
-    c.setLineWidth(1.5)
-    c.setStrokeColor(header_line)
-    line_y = TOP - 18*mm
-    c.line(L, line_y, W - R, line_y)
+    c.setFont("NanumGothic", 10)
+    c.drawString(x + 7*mm, y + 6*mm, f"{dt}")
+    c.drawRightString(x + w - 7*mm, y + 6*mm, f"{t}")
 
-# 2. KPI 영역 (겹침 방지)
-    kpi_h = 40*mm
-    gap = 8*mm
-    kpi_w = (usable_w - gap) / 2
+draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
+draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-    kpi_gap_from_line = 6*mm
-    kpi_y = line_y - kpi_gap_from_line - kpi_h  # KPI bottom y
+# ---- Cards area (22번에서 딱 끝나도록 높이 자동) ----
+bottom_margin = 14*mm
+cards_gap_from_kpi = 8*mm
+cards_top = kpi_y - cards_gap_from_kpi
 
-    def draw_kpi_simple(x, y, w, h, label, score, dt, t):
-        c.setLineWidth(0.5)
-        c.setStrokeColor(stroke)
-        c.setFillColor(colors.white)
-        c.roundRect(x, y, w, h, 3*mm, fill=1, stroke=1)
+card_y = bottom_margin
+card_h = cards_top - card_y
 
-        c.setFillColor(text_sub)
-        c.setFont("NanumGothic-Bold", 10)
-        c.drawString(x + 5*mm, y + h - 8*mm, label)
+# ---- Table card ----
+def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
+    c.setLineWidth(0.5)
+    c.setStrokeColor(stroke)
+    c.rect(x, y, w, h, stroke=1, fill=0)
+
+    header_h = 10*mm
+    c.setFillColor(header_line)
+    c.rect(x, y + h - header_h, w, header_h, stroke=0, fill=1)
+
+    c.setFillColor(colors.white)
+    c.setFont("NanumGothic-Bold", 11)
+    c.drawCentredString(x + w/2, y + h - 6.5*mm, module_name)  # "Module 1" / "Module 2"
+
+    sub_header_y = y + h - header_h - 8*mm
+
+    # ✅ Answer 줄이고, 정답률/Result 넓힘
+    col_q  = 9*mm
+    col_wr = 18*mm
+    col_ox = 14*mm
+    col_ans = w - (col_q + col_wr + col_ox)
+
+    cx_q   = x + col_q/2
+    cx_ans = x + col_q + col_ans/2
+    cx_wr  = x + col_q + col_ans + col_wr/2
+    cx_ox  = x + col_q + col_ans + col_wr + col_ox/2
+
+    c.setFillColor(text_sub)
+    c.setFont("NanumGothic-Bold", 9)
+    c.drawCentredString(cx_q,   sub_header_y, "No.")
+    c.drawCentredString(cx_ans, sub_header_y, "Answer")
+    c.drawCentredString(cx_wr,  sub_header_y, "정답률")
+    c.drawCentredString(cx_ox,  sub_header_y, "Result")
+
+    c.setStrokeColor(stroke)
+    c.line(x + 2*mm, sub_header_y - 3*mm, x + w - 2*mm, sub_header_y - 3*mm)
+
+    base_font_size = 10
+
+    # ✅ 22줄이 카드 바닥에 딱 맞도록 row_h 자동 계산
+    top_rows_y = sub_header_y - 3*mm
+    available_h = top_rows_y - y
+    row_h = available_h / 22.0
+    start_ry = top_rows_y - row_h  # 첫 줄 bottom y
+
+    for i, q in enumerate(range(1, 23)):
+        ry = start_ry - i * row_h
+
+        # stripe 유지(원하면 제거 가능)
+        if q % 2 == 0:
+            c.setFillColor(row_stripe)
+            c.rect(x + 0.5, ry, w - 1, row_h, stroke=0, fill=1)
+
+        ans_raw = _clean(ans_dict.get(q, ""))
+        rate_val = wr_dict.get(q, None)
+        wr_txt = wr_to_text(rate_val)
+        ox = "X" if q in wrong_set else "O"
+
+        text_y = ry + row_h * 0.35
+
+        # No.
+        c.setFillColor(text_main)
+        c.setFont("NanumGothic", base_font_size)
+        c.drawCentredString(cx_q, text_y, str(q))
+
+        # Answer
+        lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
+        lines = [ln.strip() for ln in lines if ln.strip() != ""]
+        if not lines:
+            lines = [""]
+
+        avail_w = col_ans - 2*mm
+        c.setFillColor(text_main)
+
+        if len(lines) == 1:
+            fs = fit_font_size(lines[0], "NanumGothic-Bold", base_font_size, 7, avail_w)
+            c.setFont("NanumGothic-Bold", fs)
+            c.drawCentredString(cx_ans, text_y, lines[0])
+        else:
+            fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 9, 6, avail_w)
+            c.setFont("NanumGothic-Bold", fs)
+            c.drawCentredString(cx_ans, text_y + row_h*0.18, lines[0])
+            c.drawCentredString(cx_ans, text_y - row_h*0.10, lines[1])
+
+        # ✅ 정답률 50% 미만은 Bold
+        rate_num = None
+        try:
+            rate_num = float(rate_val) if rate_val is not None else None
+        except:
+            rate_num = None
+
+        if rate_num is not None and rate_num < 0.5:
+            c.setFont("NanumGothic-Bold", base_font_size)
+        else:
+            c.setFont("NanumGothic", base_font_size)
 
         c.setFillColor(text_main)
-        c.setFont("NanumGothic-Bold", 24)
-        c.drawRightString(x + w - 5*mm, y + h - 12*mm, str(score))
+        c.drawCentredString(cx_wr, text_y, wr_txt)
 
-        mid_y = y + 14*mm
-        c.setLineWidth(0.5)
-        c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
-        c.line(x + 3*mm, mid_y, x + w - 3*mm, mid_y)
-
-        c.setFillColor(text_sub)
-        c.setFont("NanumGothic", 9)
-        c.drawString(x + 5*mm, mid_y - 5*mm, f"Date: {dt}")
-        c.drawString(x + 5*mm, mid_y - 10*mm, f"Time: {t}")
-
-    draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1 Results", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
-    draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
-
-# 3. 상세 분석 카드 시작점 (KPI 아래)
-    cards_gap_from_kpi = 8*mm
-    cards_top = kpi_y - cards_gap_from_kpi
-
-    card_h = 190*mm          # ✅ 먼저 정의
-    card_y = cards_top - card_h  # ✅ 그 다음 계산
-
-
-    def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
-        c.setLineWidth(0.5)
-        c.setStrokeColor(stroke)
-        c.rect(x, y, w, h, stroke=1, fill=0)
-        
-        header_h = 10*mm
-        c.setFillColor(header_line)
-        c.rect(x, y + h - header_h, w, header_h, stroke=0, fill=1)
-        
-        c.setFillColor(colors.white)
+        # Result
+        ox_color = red if ox == "X" else green
+        c.setFillColor(ox_color)
         c.setFont("NanumGothic-Bold", 11)
-        c.drawCentredString(x + w/2, y + h - 6.5*mm, module_name)
-        
-        sub_header_y = y + h - header_h - 8*mm
-        
-        col_q = 10*mm
-        col_wr = 14*mm
-        col_ox = 10*mm
-        col_ans = w - (col_q + col_wr + col_ox)
-        
-        cx_q = x + col_q/2
-        cx_ans = x + col_q + col_ans/2
-        cx_wr = x + col_q + col_ans + col_wr/2
-        cx_ox = x + col_q + col_ans + col_wr + col_ox/2
-        
-        c.setFillColor(text_sub)
-        c.setFont("NanumGothic-Bold", 9)
-        c.drawCentredString(cx_q, sub_header_y, "No.")
-        c.drawCentredString(cx_ans, sub_header_y, "Answer")
-        c.drawCentredString(cx_wr, sub_header_y, "정답률")
-        c.drawCentredString(cx_ox, sub_header_y, "Result")
-        
-        c.setStrokeColor(stroke)
-        c.line(x + 2*mm, sub_header_y - 3*mm, x + w - 2*mm, sub_header_y - 3*mm)
-        
-        row_h = 7.0*mm # 행 높이 미세 조정
-        start_y = sub_header_y - 3*mm - row_h
-        base_font_size = 10
-        
-        for i, q in enumerate(range(1, 23)):
-            ry = start_y - i * row_h
-            if q % 2 == 0:
-                c.setFillColor(row_stripe)
-                c.rect(x + 0.5, ry, w - 1, row_h, stroke=0, fill=1)
-            
-            ans_raw = _clean(ans_dict.get(q, ""))
-            rate_val = wr_dict.get(q, None)
-            wr_txt = wr_to_text(rate_val)
-            ox = "X" if q in wrong_set else "O"
-            text_y = ry + 2.5*mm
-            
-            c.setFillColor(text_main)
-            c.setFont("NanumGothic", base_font_size)
-            c.drawCentredString(cx_q, text_y, str(q))
-            
-            lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
-            lines = [ln.strip() for ln in lines if ln.strip() != ""]
-            if not lines: lines = [""]
-            
-            c.setFillColor(text_main)
-            avail_w = col_ans - 2*mm
-            
-            if len(lines) == 1:
-                fs = fit_font_size(lines[0], "NanumGothic-Bold", base_font_size, 7, avail_w)
-                c.setFont("NanumGothic-Bold", fs)
-                c.drawCentredString(cx_ans, text_y, lines[0])
-            else:
-                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 9, 6, avail_w)
-                c.setFont("NanumGothic-Bold", fs)
-                c.drawCentredString(cx_ans, text_y + 1.5*mm, lines[0])
-                c.drawCentredString(cx_ans, text_y - 1.5*mm, lines[1])
-            
-            c.setFont("NanumGothic", base_font_size)
-            c.setFillColor(text_main)
-            c.drawCentredString(cx_wr, text_y, wr_txt)
-            
-            ox_color = red if ox == "X" else green
-            c.setFillColor(ox_color)
-            c.setFont("NanumGothic-Bold", 11)
-            c.drawCentredString(cx_ox, text_y, ox)
+        c.drawCentredString(cx_ox, text_y, ox)
 
-    draw_analysis_list(L, card_y, kpi_w, card_h, "Module 1 Analysis", ans_m1, wr_m1, wrong_m1)
-    draw_analysis_list(L + kpi_w + gap, card_y, kpi_w, card_h, "Module 2 Analysis", ans_m2, wr_m2, wrong_m2)
+# ✅ Analysis 문구 제거한 호출
+draw_analysis_list(L, card_y, kpi_w, card_h, "Module 1", ans_m1, wr_m1, wrong_m1)
+draw_analysis_list(L + kpi_w + gap, card_y, kpi_w, card_h, "Module 2", ans_m2, wr_m2, wrong_m2)
+
 
     c.showPage()
     c.save()
