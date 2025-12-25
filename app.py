@@ -103,38 +103,44 @@ def extract_zip_to_dict(zip_file):
         for file in z.namelist():
             if file.lower().endswith(('png', 'jpg', 'jpeg', 'webp')):
                 parts = file.split('/')
-                if len(parts) < 2: continue
+                if len(parts) < 2:
+                    continue
                 folder = parts[0].lower()
                 q_num = os.path.splitext(os.path.basename(file))[0]
                 with z.open(file) as f:
                     img = Image.open(f).convert("RGB")
-                    if folder == "m1": m1_imgs[q_num] = img
-                    elif folder == "m2": m2_imgs[q_num] = img
+                    if folder == "m1":
+                        m1_imgs[q_num] = img
+                    elif folder == "m2":
+                        m2_imgs[q_num] = img
     return m1_imgs, m2_imgs
 
 def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
-    if not font_ready: return None
+    if not font_ready:
+        return None
     pdf = KoreanPDF()
     pdf.add_page()
     pdf.set_font(pdf_font_name, style='B', size=10)
     pdf.cell(0, 8, txt=f"<{name}_{doc_title}>", ln=True)
 
     def add_images(title, images):
-        est_height = 80 
+        est_height = 80
         if images and (pdf.get_y() + 10 + est_height > pdf.page_break_trigger):
             pdf.add_page()
 
         pdf.set_font(pdf_font_name, size=10)
         pdf.cell(0, 8, txt=title, ln=True)
-        
+
         if images:
             for img in images:
                 temp_filename = f"temp_{datetime.now().timestamp()}_{os.urandom(4).hex()}.jpg"
                 img.save(temp_filename)
                 # [고정] A4 여백 고려하여 가장 예쁜 사이즈 150mm로 고정
                 pdf.image(temp_filename, w=150)
-                try: os.remove(temp_filename)
-                except: pass
+                try:
+                    os.remove(temp_filename)
+                except:
+                    pass
                 pdf.ln(8)
         else:
             pdf.ln(8)
@@ -187,17 +193,21 @@ def group_words_into_lines(words):
 def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
     w_page = page.rect.width
     words = page.get_text("words")
-    if not words: return []
+    if not words:
+        return []
     lines = group_words_into_lines(words)
     anchors = []
 
     for tokens in lines:
         line_text = " ".join(t[4] for t in tokens).strip()
         compact = re.sub(r"\s+", "", line_text)
-        if HEADER_FOOTER_HINT_RE.search(line_text): continue
-        if len(compact) > max_line_chars: continue
+        if HEADER_FOOTER_HINT_RE.search(line_text):
+            continue
+        if len(compact) > max_line_chars:
+            continue
         x_left = min(t[0] for t in tokens)
-        if x_left > w_page * left_ratio: continue
+        if x_left > w_page * left_ratio:
+            continue
 
         qnum = None
         y_top = None
@@ -209,7 +219,7 @@ def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
                 qnum = int(m.group(1))
                 y_top = y0
                 break
-        
+
         # case 2: "21" "."
         if qnum is None:
             for i in range(len(tokens) - 1):
@@ -219,9 +229,11 @@ def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
                     qnum = int(t1)
                     y_top = tokens[i][1]
                     break
-        
-        if qnum is None: continue
-        if not (1 <= qnum <= 22): continue
+
+        if qnum is None:
+            continue
+        if not (1 <= qnum <= 22):
+            continue
         anchors.append((qnum, y_top))
 
     anchors.sort(key=lambda t: t[1])
@@ -233,20 +245,24 @@ def band_text(page, clip):
 def last_choice_bottom_y_in_band(page, y_from, y_to):
     clip = fitz.Rect(0, y_from, page.rect.width, y_to)
     t = band_text(page, clip)
-    if "A)" not in t: return None
+    if "A)" not in t:
+        return None
     for lab in CHOICE_LABELS:
         rects = page.search_for(lab)
         bottoms = [r.y1 for r in rects if (r.y1 >= y_from and r.y0 <= y_to)]
-        if bottoms: return max(bottoms)
+        if bottoms:
+            return max(bottoms)
     return None
 
 def find_footer_start_y(page, y_from, y_to):
     ys = []
     for b in page.get_text("blocks"):
-        if len(b) < 5: continue
+        if len(b) < 5:
+            continue
         y0 = b[1]
         text = b[4]
-        if y0 < y_from or y0 > y_to: continue
+        if y0 < y_from or y0 > y_to:
+            continue
         if text and HEADER_FOOTER_HINT_RE.search(str(text)):
             ys.append(y0)
     return min(ys) if ys else None
@@ -254,10 +270,13 @@ def find_footer_start_y(page, y_from, y_to):
 def content_bottom_y(page, y_from, y_to):
     bottoms = []
     for b in page.get_text("blocks"):
-        if len(b) < 5: continue
+        if len(b) < 5:
+            continue
         y0, y1, text = b[1], b[3], b[4]
-        if y1 < y_from or y0 > y_to: continue
-        if text and HEADER_FOOTER_HINT_RE.search(str(text)): continue
+        if y1 < y_from or y0 > y_to:
+            continue
+        if text and HEADER_FOOTER_HINT_RE.search(str(text)):
+            continue
         if text and str(text).strip():
             bottoms.append(y1)
     return max(bottoms) if bottoms else None
@@ -265,16 +284,22 @@ def content_bottom_y(page, y_from, y_to):
 def text_x_bounds_in_band(page, y_from, y_to, min_len=2):
     xs0, xs1 = [], []
     for b in page.get_text("blocks"):
-        if len(b) < 5: continue
+        if len(b) < 5:
+            continue
         x0, y0, x1, y1, text = b[0], b[1], b[2], b[3], b[4]
-        if y1 < y_from or y0 > y_to: continue
-        if not text: continue
+        if y1 < y_from or y0 > y_to:
+            continue
+        if not text:
+            continue
         t = str(text).strip()
-        if len(t) < min_len: continue
-        if HEADER_FOOTER_HINT_RE.search(t): continue
+        if len(t) < min_len:
+            continue
+        if HEADER_FOOTER_HINT_RE.search(t):
+            continue
         xs0.append(x0)
         xs1.append(x1)
-    if not xs0: return None
+    if not xs0:
+        return None
     return min(xs0), max(xs1)
 
 def ink_bbox_by_raster(page, clip, scan_zoom=SCAN_ZOOM, white_thresh=WHITE_THRESH):
@@ -292,12 +317,17 @@ def ink_bbox_by_raster(page, clip, scan_zoom=SCAN_ZOOM, white_thresh=WHITE_THRES
         for x in range(0, w, step):
             r, g, b = px[x, y]
             if r < white_thresh or g < white_thresh or b < white_thresh:
-                if x < minx: minx = x
-                if y < miny: miny = y
-                if x > maxx: maxx = x
-                if y > maxy: maxy = y
+                if x < minx:
+                    minx = x
+                if y < miny:
+                    miny = y
+                if x > maxx:
+                    maxx = x
+                if y > maxy:
+                    maxy = y
 
-    if maxx < 0: return None
+    if maxx < 0:
+        return None
     return (minx, miny, maxx, maxy, w, h)
 
 def px_bbox_to_page_rect(clip, px_bbox, pad_px=INK_PAD_PX):
@@ -306,7 +336,7 @@ def px_bbox_to_page_rect(clip, px_bbox, pad_px=INK_PAD_PX):
     miny = max(0, miny - pad_px)
     maxx = min(w - 1, maxx + pad_px)
     maxy = min(h - 1, maxy + pad_px)
-    
+
     x0 = clip.x0 + (minx / (w - 1)) * (clip.x1 - clip.x0)
     x1 = clip.x0 + (maxx / (w - 1)) * (clip.x1 - clip.x0)
     y0 = clip.y0 + (miny / (h - 1)) * (clip.y1 - clip.y0)
@@ -319,7 +349,8 @@ def render_png(page, clip, zoom):
 
 def expand_rect_to_width_right_only(rect, target_width, page_width):
     cur = rect.width
-    if cur >= target_width: return rect
+    if cur >= target_width:
+        return rect
     new_x0 = rect.x0
     new_x1 = rect.x0 + target_width
     new_x1 = clamp(new_x1, new_x0 + 80, page_width)
@@ -335,27 +366,30 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
     for pno in range(len(doc)):
         page = doc[pno]
         w, h = page.rect.width, page.rect.height
-        
-        page_blocks = page.get_text("blocks") 
+
+        page_blocks = page.get_text("blocks")
 
         mid = find_module_on_page(page)
-        if mid is not None: current_module = mid
-        if current_module not in (1, 2): continue
+        if mid is not None:
+            current_module = mid
+        if current_module not in (1, 2):
+            continue
 
         anchors = detect_question_anchors(page)
-        if not anchors: continue
+        if not anchors:
+            continue
 
         for i, (qnum, y0) in enumerate(anchors):
             y_start_candidate = clamp(y0 - pad_top, 0, h)
             safe_y = y_start_candidate
             for b in page_blocks:
-                b_y1 = b[3] 
+                b_y1 = b[3]
                 b_text = b[4]
                 if HEADER_FOOTER_HINT_RE.search(b_text):
                     if b_y1 < y0 and b_y1 > safe_y:
                         safe_y = b_y1 + 2
                 else:
-                    if b_y1 > safe_y and b_y1 < y0 - 2: 
+                    if b_y1 > safe_y and b_y1 < y0 - 2:
                         safe_y = b_y1 + 2
 
             y_start = clamp(safe_y, 0, h)
@@ -435,7 +469,6 @@ def make_zip_from_rects(doc, rects, zoom, zip_base_name, unify_width_right=True)
 # =========================================================
 # 메인 UI 구조
 # =========================================================
-
 tab1, tab2, tab3 = st.tabs(["📝 오답노트 생성기", "✂️ 문제캡처 ZIP생성기", "📊 개인 성적표"])
 
 # ---------------------------------------------------------
@@ -454,14 +487,14 @@ with tab1:
 
     st.markdown("---")
     st.subheader("📊 예시 엑셀 양식")
-    
+
     with st.expander("예시 엑셀파일 미리보기 (클릭하여 열기)"):
         st.dataframe(example_input_df(), use_container_width=True)
-    
+
     example = get_example_excel()
     st.download_button(
-        "📥 예시 엑셀파일 다운로드 (.xlsx)", 
-        example, 
+        "📥 예시 엑셀파일 다운로드 (.xlsx)",
+        example,
         file_name="Mock결과_양식.xlsx"
     )
 
@@ -471,14 +504,14 @@ with tab1:
 
     st.header("📦 파일 업로드")
 
-    st.write("") 
+    st.write("")
     st.markdown("#### 문제 이미지 ZIP 파일")
-    img_zip = st.file_uploader("m1, m2 폴더가 들어있는 ZIP 파일", type="zip", key="t1_zip") 
+    img_zip = st.file_uploader("m1, m2 폴더가 들어있는 ZIP 파일", type="zip", key="t1_zip")
 
     st.markdown("#### 오답 현황 엑셀 파일")
     excel_file = st.file_uploader("학생들의 결과 데이터가 담긴 엑셀 파일", type="xlsx", key="t1_excel")
 
-    st.write("") 
+    st.write("")
 
     if st.button("🚀 오답노트 생성 시작", type="primary", key="t1_btn"):
         if not img_zip or not excel_file:
@@ -496,27 +529,30 @@ with tab1:
 
                 output_dir = "generated_pdfs"
                 os.makedirs(output_dir, exist_ok=True)
-                
+
                 temp_files = []
                 skipped_details = {"만점": [], "M1/M2 하나 미제출": [], "미제출": []}
                 progress_bar = st.progress(0)
-                
+
                 for idx, row in df.iterrows():
                     name = row['이름']
-                    
+
                     def parse_module_data(x):
-                        if pd.isna(x): return None
+                        if pd.isna(x):
+                            return None
                         s = str(x).strip()
-                        if s == "": return None  
-                        if s.upper() in ["X", "Х", "-"]: return [] 
-                        
+                        if s == "":
+                            return None
+                        if s.upper() in ["X", "Х", "-"]:
+                            return []
+
                         s = s.replace("，", ",").replace(";", ",")
                         nums = [t.strip() for t in s.split(",") if t.strip()]
-                        return nums if nums else [] 
+                        return nums if nums else []
 
                     m1_data = parse_module_data(row['Module1'])
                     m2_data = parse_module_data(row['Module2'])
-                    
+
                     skip_reason = None
                     if m1_data is None and m2_data is None:
                         skip_reason = "미제출"
@@ -524,7 +560,7 @@ with tab1:
                         skip_reason = "M1/M2 하나 미제출"
                     elif len(m1_data) == 0 and len(m2_data) == 0:
                         skip_reason = "만점"
-                    
+
                     if skip_reason:
                         skipped_details[skip_reason].append(name)
                         progress_bar.progress((idx + 1) / len(df))
@@ -548,18 +584,17 @@ with tab1:
                             zipf.write(path, os.path.basename(path))
                     zip_buf.seek(0)
                     st.session_state.zip_buffer = zip_buf
-                    
+
                     st.success(f"✅ 총 {len(temp_files)}명의 오답노트 생성 완료!")
                 else:
                     st.warning("생성된 파일이 없습니다.")
-                
+
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
-    # [수정] 결과 표시 로직을 버튼 밖으로 빼서 다운로드 시에도 유지되게 함
+    # 결과 표시 로직 (버튼 밖)
     if st.session_state.generated_files or st.session_state.skipped_details:
-        
-        # 상세 결과 리포트 출력 (항상 보이게)
+
         if st.session_state.skipped_details:
             total_skipped = sum(len(v) for v in st.session_state.skipped_details.values())
             if total_skipped > 0:
@@ -568,25 +603,28 @@ with tab1:
                     with c1:
                         st.markdown("**🏆 만점 (Perfect)**")
                         if st.session_state.skipped_details["만점"]:
-                            for n in st.session_state.skipped_details["만점"]: st.text(f"- {n}")
+                            for n in st.session_state.skipped_details["만점"]:
+                                st.text(f"- {n}")
                         else:
                             st.caption("없음")
                     with c2:
                         st.markdown("**⚠️ 하나 미제출**")
                         if st.session_state.skipped_details["M1/M2 하나 미제출"]:
-                            for n in st.session_state.skipped_details["M1/M2 하나 미제출"]: st.text(f"- {n}")
+                            for n in st.session_state.skipped_details["M1/M2 하나 미제출"]:
+                                st.text(f"- {n}")
                         else:
                             st.caption("없음")
                     with c3:
                         st.markdown("**❌ 미제출**")
                         if st.session_state.skipped_details["미제출"]:
-                            for n in st.session_state.skipped_details["미제출"]: st.text(f"- {n}")
+                            for n in st.session_state.skipped_details["미제출"]:
+                                st.text(f"- {n}")
                         else:
                             st.caption("없음")
 
         st.markdown("---")
         st.header("💾 다운로드")
-        
+
         if st.session_state.zip_buffer:
             st.download_button(
                 "📦 전체 오답노트 ZIP 다운로드",
@@ -599,11 +637,11 @@ with tab1:
         st.subheader("👁️ 개별 PDF 다운로드")
         student_names = [name for name, _ in st.session_state.generated_files]
         selected_student = st.selectbox("학생을 선택하세요", student_names, key="t1_select")
-        
+
         if selected_student:
             file_map = {name: path for name, path in st.session_state.generated_files}
             target_path = file_map[selected_student]
-            
+
             if os.path.exists(target_path):
                 with open(target_path, "rb") as f:
                     st.download_button(
@@ -653,21 +691,20 @@ with tab2:
                         zip_base,
                         unify_width_right=unify_width,
                     )
-                    
+
                     st.success(f"✅ 처리가 완료되었습니다! (총 {len(rects_data)}문제 추출)")
                     st.download_button(
-                        "📦 ZIP 다운로드", 
-                        data=zbuf_data, 
-                        file_name=zname, 
+                        "📦 ZIP 다운로드",
+                        data=zbuf_data,
+                        file_name=zname,
                         mime="application/zip",
                         key="t2_down"
                     )
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
 
-
 # ---------------------------------------------------------
-# [Tab 3] 개인 성적표 (Student Analysis 학생목록 + QuizResults 메타 + Mock/오답률)
+# [Tab 3] 개인 성적표 (Student Analysis 학생목록 + QuizResults 메타 + Mock/정답률)
 # ---------------------------------------------------------
 with tab3:
     st.header("📊 개인 성적표")
@@ -691,8 +728,8 @@ with tab3:
     QUIZ_SHEET = "QuizResults"
     ERROR_SHEET = "Error Analysis"
 
-    SA_HEADER_ROW_IDX = 1  # ✅ Student Analysis: 2행이 헤더
-    QZ_HEADER_ROW_IDX = 0  # ✅ QuizResults: 1행이 헤더
+    SA_HEADER_ROW_IDX = 1  # Student Analysis: 2행이 헤더
+    QZ_HEADER_ROW_IDX = 0  # QuizResults: 1행이 헤더
 
     # Student Analysis: 학생목록 ONLY
     SA_NAME_COL = "학생 이름"
@@ -712,8 +749,10 @@ with tab3:
     # Helpers
     # =========================
     def _clean(x):
-        if x is None: return ""
-        if isinstance(x, float) and pd.isna(x): return ""
+        if x is None:
+            return ""
+        if isinstance(x, float) and pd.isna(x):
+            return ""
         return str(x).replace("\r", "").strip()
 
     def parse_wrong_list(val):
@@ -733,14 +772,20 @@ with tab3:
                 pass
         return out
 
+    # ✅ [수정] 정답률 표시: 100%는 반드시 표시, 0%도 숨기지 않음
+    # (ETA 값이 0~1 이든 0~100 이든 자동 처리)
     def wr_to_text(v):
-        """0%면 '-'"""
         if v is None:
             return "-"
         try:
             v = float(v)
-            if abs(v) < 1e-12:
-                return "-"
+            # 0~100(%)로 들어오는 경우 0~1로 보정
+            if v > 1.0000001:
+                v = v / 100.0
+            v = max(0.0, min(1.0, v))
+
+            if abs(v - 1.0) < 1e-12:
+                return "100%"
             return f"{int(round(v * 100))}%"
         except:
             return "-"
@@ -761,7 +806,7 @@ with tab3:
             st.write(f"현재 {label} 컬럼:", list(df.columns))
             st.stop()
 
-    # ✅ Error Analysis 정답률 고정 범위: M1=C3:C24, M2=C26:C47
+    # ✅ Error Analysis 정답률 고정 범위: M1=C3:C24, M2=C26:C47 (시트이름/주소 동일)
     def build_wrong_rate_dict_fixed_ranges(eta_xl):
         df = pd.read_excel(eta_xl, sheet_name=ERROR_SHEET, header=None)
         colC = df.iloc[:, 2].tolist()  # C열
@@ -798,8 +843,10 @@ with tab3:
         if not m2_idxs:
             out = {}
             for _, r in df.iterrows():
-                try: q = int(str(r[c0]).strip())
-                except: continue
+                try:
+                    q = int(str(r[c0]).strip())
+                except:
+                    continue
                 out[q] = _clean(r[c1])
             return out, {}
 
@@ -808,10 +855,12 @@ with tab3:
         m2_rows = df.iloc[m2i+1:]
 
         def rows_to_ans(rows):
-            dct={}
+            dct = {}
             for _, r in rows.iterrows():
-                try: q = int(str(r[c0]).strip())
-                except: continue
+                try:
+                    q = int(str(r[c0]).strip())
+                except:
+                    continue
                 dct[q] = _clean(r[c1])
             return dct
 
@@ -828,7 +877,6 @@ with tab3:
     from reportlab.pdfbase.ttfonts import TTFont
 
     def ensure_fonts_registered():
-        # 중복 등록되어도 크게 문제 없게 try 처리
         try:
             pdfmetrics.registerFont(TTFont("NanumGothic", FONT_REGULAR))
         except:
@@ -889,27 +937,24 @@ with tab3:
         c = canvas.Canvas(output_path, pagesize=A4)
         W, H = A4
 
-        # ✅ Print-friendly palette
-        bg = colors.white  # 페이지 배경은 완전 흰색
-        stroke = colors.Color(210/255, 218/255, 230/255)  # 라인만 은은하게
+        # ✅ (요청대로 다른 디자인은 건드리지 않고)
+        # 표기만 "정답률"로 쓰기 위해 라벨만 바꿔줍니다.
+        bg = colors.Color(248/255, 250/255, 252/255)
+        stroke = colors.Color(226/255, 232/255, 240/255)
         muted = colors.Color(71/255, 85/255, 105/255)
         title_col = colors.Color(15/255, 23/255, 42/255)
-
-        # 표 헤더/필 정도만 아주 옅게 (프린트해도 깔끔)
-        pill_fill = colors.Color(245/255, 247/255, 250/255)
-        stripe = colors.white  # ✅ 줄무늬 제거(인쇄 얼룩 느낌 방지)
-
+        pill_fill = colors.Color(241/255, 245/255, 249/255)
+        stripe = colors.Color(248/255, 250/255, 252/255)
         green = colors.Color(22/255, 101/255, 52/255)
         red = colors.Color(153/255, 27/255, 27/255)
 
-        # background (white)
+        # background
         c.setFillColor(bg)
         c.rect(0, 0, W, H, stroke=0, fill=1)
 
-
         L = 16*mm
         R = 16*mm
-        TOP = H - 12*mm          # ✅ 윗여백 줄임
+        TOP = H - 12*mm
         usable_w = W - L - R
 
         # Generated
@@ -950,7 +995,7 @@ with tab3:
         kpi_h = 21 * mm
         gap = 5 * mm
         kpi_w = (usable_w - gap) / 2
-        kpi_y = header_y - 5 * mm - kpi_h  # ✅ 간격 줄임
+        kpi_y = header_y - 5 * mm - kpi_h
 
         def draw_kpi_card(x, y, label, score_txt, dt, t):
             draw_round_rect(c, x, y, kpi_w, kpi_h, 8 * mm, colors.white, stroke, 1)
@@ -959,12 +1004,10 @@ with tab3:
             c.setFont("NanumGothic-Bold", 11.5)
             c.drawString(x + 6 * mm, y + kpi_h - 8.2 * mm, label)
 
-            # ✅ 점수 더 위로
             c.setFont("NanumGothic-Bold", 18)
             c.setFillColor(title_col)
             c.drawRightString(x + kpi_w - 6 * mm, y + kpi_h - 11.4 * mm, str(score_txt))
 
-            # ✅ 라벨 제거 -> 값만
             c.setFont("NanumGothic", 9)
             c.setFillColor(muted)
             c.drawString(x + 6 * mm, y + 3.8 * mm, f"{dt}")
@@ -973,14 +1016,8 @@ with tab3:
         draw_kpi_card(L, kpi_y, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
         draw_kpi_card(L + kpi_w + gap, kpi_y, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-        # ===== 분석 제목 제거 =====
-        # (공간 확보용)
-
         # ===== Analysis cards =====
-        # ✅ 카드 시작을 KPI 바로 밑으로
         cards_top = kpi_y - 4*mm
-
-        # ✅ 카드 높이 충분히 크게 (22문항 절대 안 잘리게)
         card_h = 170*mm
 
         card_w = (usable_w - gap) / 2
@@ -991,12 +1028,10 @@ with tab3:
         def draw_analysis_card(x, y, title_txt, ans_dict, wr_dict, wrong_set):
             draw_round_rect(c, x, y, card_w, card_h, 10*mm, colors.white, stroke, 1)
 
-            # Title inside card
             c.setFillColor(title_col)
             c.setFont("NanumGothic-Bold", 14.5)
             c.drawString(x + 9*mm, y + card_h - 11.8*mm, title_txt)
 
-            # Header strip (작게)
             strip_h = 8.5*mm
             strip_y = y + card_h - 23.2*mm
             draw_round_rect(c, x + 6*mm, strip_y, card_w - 12*mm, strip_h, 6*mm, pill_fill, stroke, 1)
@@ -1017,15 +1052,15 @@ with tab3:
             header_y = strip_y + 2.4*mm
             draw_text_center(c, q_center, header_y, "문항", "NanumGothic-Bold", 9.6, muted)
             draw_text_center(c, ans_center, header_y, "정답", "NanumGothic-Bold", 9.6, muted)
+            # ✅ [수정] 라벨을 정답률로
             draw_text_center(c, wr_center, header_y, "정답률", "NanumGothic-Bold", 9.6, muted)
             draw_text_center(c, ox_center, header_y, "정오", "NanumGothic-Bold", 9.6, muted)
 
-            # ✅ row 더 촘촘하게
             row_h = 6.0*mm
             row_gap = 0.45*mm
             start_y = strip_y - 1.8*mm - row_h
 
-            base = 1.55*mm  # baseline
+            base = 1.55*mm
 
             for i, q in enumerate(range(1, 23)):
                 ry = start_y - i*(row_h + row_gap)
@@ -1038,19 +1073,18 @@ with tab3:
                 ans_raw = _clean(ans_dict.get(q, ""))
                 lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
                 lines = [ln.strip() for ln in lines if ln.strip() != ""]
-                if not lines: lines = [""]
+                if not lines:
+                    lines = [""]
 
-                # 2줄 이상이면 2줄까지만 (원본이 2줄이면 그대로)
                 if len(lines) > 2:
                     lines = [lines[0], " ".join(lines[1:])]
 
-                wr_txt = wr_to_text(wr_dict.get(q, None))
+                wr_val = wr_dict.get(q, None)
+                wr_txt = wr_to_text(wr_val)
                 ox = "X" if q in wrong_set else "O"
 
-                # Q / WR / OX 폰트 더 줄임
                 draw_text_center(c, q_center,  ry + base, str(q), "NanumGothic", 10.2, title_col)
 
-                # Answer: 길면 같은 셀에서 자동 축소 (2줄이면 2줄 모두 같은 폰트 크기)
                 ans_max_w = col_ans - 3.0*mm
                 fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 10.4, 6.6, ans_max_w)
 
@@ -1060,7 +1094,18 @@ with tab3:
                     draw_text_center(c, ans_center, ry + (base + 0.85*mm), lines[0], "NanumGothic-Bold", fs, title_col)
                     draw_text_center(c, ans_center, ry + (base - 0.65*mm), lines[1], "NanumGothic-Bold", fs, title_col)
 
-                draw_text_center(c, wr_center, ry + base, wr_txt, "NanumGothic", 10.2, title_col)
+                # ✅ [수정] 정답률 50% 미만은 굵게
+                wr_is_low = False
+                try:
+                    vv = float(wr_val) if wr_val is not None else None
+                    if vv is not None and vv > 1.0000001:  # 0~100 들어오는 경우
+                        vv = vv / 100.0
+                    if vv is not None and vv < 0.5:
+                        wr_is_low = True
+                except:
+                    pass
+                wr_font = "NanumGothic-Bold" if wr_is_low else "NanumGothic"
+                draw_text_center(c, wr_center, ry + base, wr_txt, wr_font, 10.2, title_col)
 
                 ox_color = red if ox == "X" else green
                 draw_text_center(c, ox_center, ry + base, ox, "NanumGothic-Bold", 11.6, ox_color)
@@ -1173,13 +1218,13 @@ with tab3:
                 m1_score_txt = _clean(m1.get("score", ""))
                 m2_score_txt = _clean(m2.get("score", ""))
 
-                # ✅ M1/M2 점수 중 하나라도 blank면 제외
+                # M1/M2 점수 중 하나라도 blank면 제외
                 if m1_score_txt == "" or m2_score_txt == "":
                     skipped.append(stu)
                     prog.progress((i+1)/len(students))
                     continue
 
-                # ✅ 부제목: 검색 키워드 (M1 우선, 없으면 M2)
+                # 부제목: 검색 키워드 (M1 우선, 없으면 M2)
                 subtitle_kw = _clean(m1.get("keyword", "")) or _clean(m2.get("keyword", "")) or "-"
 
                 m1_meta = {"score": m1_score_txt, "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
