@@ -841,7 +841,7 @@ with tab3:
 
     # -------------------------------------------------------------
     # [수정된 함수] 제목 제거, 테이블 위로 이동, 헤더 축소, KPI 줄 제거,
-    #              **헤더와 1행 사이 간격 축소**
+    #              헤더와 1행 사이 간격 축소 유지
     # -------------------------------------------------------------
     def create_report_pdf_reportlab(
         output_path: str,
@@ -1240,8 +1240,8 @@ with tab3:
                 prog.progress((i+1)/len(students))
 
             # ---- 템플릿 1개 추가 (Name='-', Result 빈칸) ----
-            # [수정] subtitle에 "-" 대신 수집된 common_subtitle 사용
-            template_pdf = os.path.join(output_dir, f"__TEMPLATE__{generated_date.strftime('%Y%m%d')}.pdf")
+            # [수정] 파일명 __TEMPLATE__ -> Report_ 로 변경
+            template_pdf = os.path.join(output_dir, f"Report_{generated_date.strftime('%Y%m%d')}.pdf")
             create_report_pdf_reportlab(
                 output_path=template_pdf,
                 title=report_title,
@@ -1259,14 +1259,14 @@ with tab3:
                 result_blank=True,
                 footer_left_text=FOOTER_LEFT_TEXT,
             )
-            made_files.append(("__TEMPLATE__", template_pdf))
+            made_files.append(("Report", template_pdf))
 
             try:
                 png_bytes = render_pdf_first_page_to_png_bytes(template_pdf, zoom=2.0)
-                template_png = os.path.join(output_dir, f"__TEMPLATE__{generated_date.strftime('%Y%m%d')}.png")
+                template_png = os.path.join(output_dir, f"Report_{generated_date.strftime('%Y%m%d')}.png")
                 with open(template_png, "wb") as f:
                     f.write(png_bytes)
-                made_images.append(("__TEMPLATE__", template_png))
+                made_images.append(("Report", template_png))
             except:
                 pass
 
