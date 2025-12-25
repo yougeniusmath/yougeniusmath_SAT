@@ -532,7 +532,6 @@ def fit_font_size_two_lines(lines, font_name, max_size, min_size, max_width):
         need = min(need, fit_font_size(ln, font_name, max_size, min_size, max_width))
     return need
 
-# [수정된 함수] 이 코드를 복사해서 기존 create_report_pdf_reportlab 함수 자리에 덮어쓰세요.
 def create_report_pdf_reportlab(
     output_path: str,
     title: str,
@@ -548,12 +547,11 @@ def create_report_pdf_reportlab(
     wrong_m1: set,
     wrong_m2: set,
 ):
-    # [중요] 여기 아래부터는 반드시 들여쓰기(Tab)가 되어 있어야 합니다.
     ensure_fonts_registered()
     c = canvas.Canvas(output_path, pagesize=A4)
     W, H = A4
 
-    # === [디자인 컬러 팔레트: 인쇄 친화적 화이트톤] ===
+    # === [디자인 컬러 팔레트] ===
     stroke = colors.Color(203/255, 213/255, 225/255)
     header_line = colors.Color(30/255, 41/255, 59/255)
     text_main = colors.Color(15/255, 23/255, 42/255)
@@ -565,34 +563,39 @@ def create_report_pdf_reportlab(
     # 여백 설정
     L = 15*mm
     R = 15*mm
-    TOP = H - 15*mm
+    # [수정] 상단 여백을 더 확보 (15mm -> 20mm)
+    TOP = H - 20*mm
     usable_w = W - L - R
 
     # 1. 문서 헤더
+    # [수정] 우측 상단 정보 배치 (날짜 아래 이름)
     c.setFillColor(text_sub)
     c.setFont("NanumGothic", 9)
     c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
 
     c.setFillColor(text_main)
+    c.setFont("NanumGothic-Bold", 14)
+    c.drawRightString(W - R, TOP - 6*mm, student_name)
+
+    # [수정] 좌측 상단 타이틀 배치
+    c.setFillColor(text_main)
     c.setFont("NanumGothic-Bold", 24)
-    c.drawString(L, TOP - 10*mm, title)
+    c.drawString(L, TOP - 5*mm, title)
 
     c.setFillColor(text_sub)
     c.setFont("NanumGothic", 12)
-    c.drawString(L, TOP - 17*mm, subtitle)
-
-    c.setFillColor(text_main)
-    c.setFont("NanumGothic-Bold", 16)
-    c.drawRightString(W - R, TOP - 10*mm, student_name)
+    c.drawString(L, TOP - 13*mm, subtitle)
     
+    # [수정] 헤더 구분선 위치 조정
     c.setLineWidth(1.5)
     c.setStrokeColor(header_line)
-    line_y = TOP - 22*mm
+    line_y = TOP - 20*mm
     c.line(L, line_y, W - R, line_y)
 
     # 2. KPI 영역
-    kpi_y = line_y - 10*mm
-    kpi_h = 25*mm
+    # [수정] KPI 영역 시작 위치 및 높이 조정
+    kpi_y = line_y - 8*mm
+    kpi_h = 32*mm  # 높이를 늘림 (25mm -> 32mm)
     gap = 8*mm
     kpi_w = (usable_w - gap) / 2
 
@@ -602,27 +605,34 @@ def create_report_pdf_reportlab(
         c.setFillColor(colors.white)
         c.roundRect(x, y, w, h, 3*mm, fill=1, stroke=1)
         
+        # 라벨
         c.setFillColor(text_sub)
         c.setFont("NanumGothic-Bold", 10)
         c.drawString(x + 5*mm, y + h - 8*mm, label)
         
+        # 점수
         c.setFillColor(text_main)
-        c.setFont("NanumGothic-Bold", 20)
-        c.drawRightString(x + w - 5*mm, y + h - 10*mm, str(score))
+        c.setFont("NanumGothic-Bold", 22)
+        # [수정] 점수 위치를 내려서 라벨과 겹치지 않게 함
+        c.drawRightString(x + w - 5*mm, y + h - 18*mm, str(score))
         
+        # 구분선
         c.setLineWidth(0.5)
         c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
-        c.line(x + 3*mm, y + 9*mm, x + w - 3*mm, y + 9*mm)
+        c.line(x + 3*mm, y + 11*mm, x + w - 3*mm, y + 11*mm)
         
+        # 날짜/시간
         c.setFillColor(text_sub)
-        c.setFont("NanumGothic", 9)
-        c.drawString(x + 5*mm, y + 4*mm, f"Date: {dt}")
-        c.drawRightString(x + w - 5*mm, y + 4*mm, f"Time: {t}")
+        c.setFont("NanumGothic", 8.5)
+        # [수정] Date와 Time을 두 줄로 분리하여 겹침 방지
+        c.drawString(x + 5*mm, y + 7*mm, f"Date: {dt}")
+        c.drawString(x + 5*mm, y + 3*mm, f"Time: {t}")
 
     draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1 Results", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
     draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
     # 3. 상세 분석 카드
+    # [수정] 상단 요소 위치 변경에 따른 시작점 조정
     cards_top = kpi_y - 8*mm 
     card_h = 200*mm
     card_y = cards_top - card_h
