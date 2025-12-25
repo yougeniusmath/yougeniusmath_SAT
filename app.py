@@ -532,6 +532,7 @@ def fit_font_size_two_lines(lines, font_name, max_size, min_size, max_width):
         need = min(need, fit_font_size(ln, font_name, max_size, min_size, max_width))
     return need
 
+# [수정된 함수] 이 코드를 복사해서 기존 create_report_pdf_reportlab 함수 자리에 덮어쓰세요.
 def create_report_pdf_reportlab(
     output_path: str,
     title: str,
@@ -547,17 +548,18 @@ def create_report_pdf_reportlab(
     wrong_m1: set,
     wrong_m2: set,
 ):
+    # [중요] 여기 아래부터는 반드시 들여쓰기(Tab)가 되어 있어야 합니다.
     ensure_fonts_registered()
     c = canvas.Canvas(output_path, pagesize=A4)
     W, H = A4
 
     # === [디자인 컬러 팔레트: 인쇄 친화적 화이트톤] ===
-    stroke = colors.Color(203/255, 213/255, 225/255)  # 연한 회색 테두리
-    header_line = colors.Color(30/255, 41/255, 59/255) # 진한 네이비 (구분선)
-    text_main = colors.Color(15/255, 23/255, 42/255)   # 거의 검정
-    text_sub = colors.Color(100/255, 116/255, 139/255) # 연한 회색 텍스트
+    stroke = colors.Color(203/255, 213/255, 225/255)
+    header_line = colors.Color(30/255, 41/255, 59/255)
+    text_main = colors.Color(15/255, 23/255, 42/255)
+    text_sub = colors.Color(100/255, 116/255, 139/255)
     green = colors.Color(22/255, 101/255, 52/255)
-    red = colors.Color(220/255, 38/255, 38/255)       # 조금 더 선명한 빨강
+    red = colors.Color(220/255, 38/255, 38/255)
     row_stripe = colors.Color(248/255, 250/255, 252/255) 
 
     # 여백 설정
