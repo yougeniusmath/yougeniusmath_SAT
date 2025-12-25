@@ -596,12 +596,12 @@ def create_report_pdf_reportlab(
 
     # 2. KPI 영역 (겹침 방지)  ✅ 여기만 수정
     # 구분선(line_y) 바로 아래에 KPI가 오도록: "bottom y"를 계산해줌
-        kpi_h = 40*mm
-        gap = 8*mm
-        kpi_w = (usable_w - gap) / 2
+    kpi_h = 40*mm
+    gap = 8*mm
+    kpi_w = (usable_w - gap) / 2
 
-        kpi_gap_from_line = 6*mm  # 구분선과 KPI 사이 간격
-        kpi_y = line_y - kpi_gap_from_line - kpi_h  # ✅ (중요) KPI의 bottom y
+    kpi_gap_from_line = 6*mm  # 구분선과 KPI 사이 간격
+    kpi_y = line_y - kpi_gap_from_line - kpi_h  # ✅ (중요) KPI의 bottom y
 
     def draw_kpi_simple(x, y, w, h, label, score, dt, t):
         c.setLineWidth(0.5)
