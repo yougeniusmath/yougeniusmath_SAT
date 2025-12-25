@@ -733,7 +733,6 @@ with tab3:
             st.write(f"현재 {label} 컬럼:", list(df.columns))
             st.stop()
 
-    # ✅ 정답률(dict) 고정 범위: M1=C3:C24, M2=C26:C47
     def build_wrong_rate_dict_fixed_ranges(eta_xl, sheet_name):
         df = pd.read_excel(eta_xl, sheet_name=sheet_name, header=None)
         colC = df.iloc[:, 2].tolist()
@@ -840,6 +839,9 @@ with tab3:
         except:
             return "-"
 
+    # -------------------------------------------------------------
+    # [수정된 함수] 제목 제거, 테이블 위로 이동, 헤더 축소 적용됨
+    # -------------------------------------------------------------
     def create_report_pdf_reportlab(
         output_path: str,
         title: str,
@@ -870,13 +872,13 @@ with tab3:
         green = colors.Color(22/255, 101/255, 52/255)
         red = colors.Color(220/255, 38/255, 38/255)
 
-        # layout (제목이 너무 위로 올라가는 문제 방지)
+        # layout
         L = 15 * mm
         R = 15 * mm
         TOP = H - 28 * mm
         usable_w = W - L - R
 
-        # Generated (올림)
+        # Generated
         c.setFont("NanumGothic", 10)
         c.setFillColor(muted)
         c.drawRightString(W - R, TOP + 16*mm, f"Generated: {gen_date_str}")
@@ -890,7 +892,7 @@ with tab3:
         c.setFont("NanumGothic", 14)
         c.drawString(L, TOP - 11*mm, subtitle)
 
-        # Name pill (조금 아래로)
+        # Name pill
         pill_w = 78 * mm
         pill_h = 20 * mm
         pill_x = L + usable_w - pill_w
@@ -927,17 +929,14 @@ with tab3:
             c.setFont("NanumGothic-Bold", 16)
             c.drawString(x + 8*mm, y + h - 11*mm, label)
 
-            # 점수: 조금 작게 + 아래로
             c.setFont("NanumGothic-Bold", 28)
             c.drawRightString(x + w - 8*mm, y + h - 16.5*mm, str(score))
 
-            # mid line
             mid_y = y + 10.5*mm
             c.setLineWidth(0.6)
             c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
             c.line(x + 6*mm, mid_y, x + w - 6*mm, mid_y)
 
-            # Date/Time: 작게, 좌/우
             c.setFillColor(muted)
             c.setFont("NanumGothic", 8)
             c.drawString(x + 8*mm, y + 4.8*mm, f"{dt}")
@@ -946,14 +945,17 @@ with tab3:
         draw_kpi_card(L, kpi_y, kpi_w, kpi_h, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
         draw_kpi_card(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-        # tables size: 22줄 딱 맞게
-        cards_top = kpi_y - 8 * mm
-        header_h = 8.0 * mm
+        # [수정] 테이블 사이즈 및 레이아웃 설정
+        header_h = 6.0 * mm    # 헤더 높이 축소
         row_h = 5.6 * mm
-        top_padding = 7.0 * mm
+        top_padding = 5.0 * mm # 제목 제거로 상단 여백 축소
         bottom_padding = 6.0 * mm
+        
+        # 전체 카드 높이 계산
         card_h = top_padding + header_h + (22 * row_h) + bottom_padding
-        card_y = cards_top - card_h
+        
+        # 카드 위치 (KPI 아래로 바짝 붙임)
+        card_y = kpi_y - 4 * mm - card_h 
 
         card_w = kpi_w
         left_x = L
@@ -962,13 +964,15 @@ with tab3:
         def draw_table(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
             draw_round_rect(c, x, y, w, h, 10*mm, colors.white, stroke, 1)
 
-            c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 14)
-            c.drawString(x + 9*mm, y + h - 12*mm, module_name)
+            # [삭제] 제목 그리기 코드 제거
+            # c.setFillColor(title_col)
+            # c.setFont("NanumGothic-Bold", 14)
+            # c.drawString(x + 9*mm, y + h - 12*mm, module_name)
 
-            # 헤더: 네모
-            strip_y = y + h - 22.0 * mm
+            # [수정] 헤더 위치 조정
+            strip_y = y + h - top_padding - header_h
             strip_h = header_h
+            
             c.setLineWidth(1)
             c.setStrokeColor(stroke)
             c.setFillColor(pill_fill)
@@ -977,7 +981,6 @@ with tab3:
             inner_x = x + 8 * mm
             inner_w = w - 16 * mm
 
-            # Answer 폭 확보 + 정답률/Result 여유
             col_q = 10 * mm
             col_ans = 26 * mm
             col_wr = 20 * mm
@@ -988,7 +991,9 @@ with tab3:
             wr_center = inner_x + col_q + col_ans + col_wr / 2
             res_center = inner_x + col_q + col_ans + col_wr + col_res / 2
 
-            header_text_y = strip_y + 2.2 * mm
+            # [수정] 헤더 텍스트 위치 미세 조정
+            header_text_y = strip_y + 1.8 * mm
+            
             c.setFillColor(muted)
             c.setFont("NanumGothic-Bold", 9.5)
             c.drawCentredString(q_center, header_text_y, "No.")
@@ -1039,7 +1044,7 @@ with tab3:
                     c.drawCentredString(ans_center, ry + base + 0.7*mm, lines[0])
                     c.drawCentredString(ans_center, ry + base - 0.7*mm, lines[1])
 
-                # 정답률: 50% 미만 bold
+                # 정답률
                 is_low = False
                 try:
                     if rate_val is not None and float(rate_val) < 0.5:
@@ -1064,7 +1069,7 @@ with tab3:
         draw_table(left_x, card_y, card_w, card_h, "Module 1", ans_m1, wr_m1, wrong_m1)
         draw_table(right_x, card_y, card_w, card_h, "Module 2", ans_m2, wr_m2, wrong_m2)
 
-        # footer left (글자크기 8, 줄바꿈)
+        # footer
         if footer_left_text:
             c.setFillColor(title_col)
             c.setFont("NanumGothic", 8)
@@ -1180,6 +1185,9 @@ with tab3:
             skipped = []
             prog = st.progress(0)
 
+            # [추가] 템플릿용 공통 부제목 저장 변수
+            common_subtitle = "-"
+
             for i, stu in enumerate(students):
                 q = quiz_map.get(stu, {})
                 m1 = q.get(1, {})
@@ -1194,6 +1202,10 @@ with tab3:
                     continue
 
                 subtitle_kw = _clean(m1.get("keyword", "")) or _clean(m2.get("keyword", "")) or "-"
+                
+                # [추가] 유효한 키워드가 있으면 템플릿용으로 저장
+                if subtitle_kw != "-" and common_subtitle == "-":
+                    common_subtitle = subtitle_kw
 
                 m1_meta = {"score": m1_score_txt, "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
                 m2_meta = {"score": m2_score_txt, "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
@@ -1236,11 +1248,12 @@ with tab3:
                 prog.progress((i+1)/len(students))
 
             # ---- 템플릿 1개 추가 (Name='-', Result 빈칸) ----
+            # [수정] subtitle에 "-" 대신 수집된 common_subtitle 사용
             template_pdf = os.path.join(output_dir, f"__TEMPLATE__{generated_date.strftime('%Y%m%d')}.pdf")
             create_report_pdf_reportlab(
                 output_path=template_pdf,
                 title=report_title,
-                subtitle="-",
+                subtitle=common_subtitle, 
                 gen_date_str=generated_date.strftime("%Y-%m-%d"),
                 student_name="-",
                 m1_meta={"score": "-", "dt": "-", "time": "-"},
