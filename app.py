@@ -733,20 +733,20 @@ with tab3:
                 pass
         return out
 
-        def wr_to_text(v):
+    def wr_to_text(v):
         """
         정답률 표시용 함수
         - None이면 '-'
         - 0% ~ 100% 모두 표시 (지우지 않음)
         """
-            if v is None:
+        if v is None:
             return "-"
-            try:
-                v = float(v)
+        try:
+             v = float(v)
             # [수정] 정답률이므로 0%도 100%도 모두 의미가 있음. 무조건 표시.
             return f"{int(round(v * 100))}%"
-            except:
-                return "-"
+        except:
+            return "-"
 
     def score_to_slash22(s):
         """QuizResults 점수가 이미 '19 / 22'면 그대로, 아니면 '점수 / 22'"""
