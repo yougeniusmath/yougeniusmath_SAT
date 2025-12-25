@@ -558,83 +558,83 @@ def create_report_pdf_reportlab(
     text_sub = colors.Color(100/255, 116/255, 139/255)
     green = colors.Color(22/255, 101/255, 52/255)
     red = colors.Color(220/255, 38/255, 38/255)
-    row_stripe = colors.Color(248/255, 250/255, 252/255) 
+    row_stripe = colors.Color(248/255, 250/255, 252/255)
+    
+    # [확인용] 제목을 진한 파란색(Navy)으로 설정 (업데이트 확인용)
+    title_color = colors.Color(25/255, 25/255, 112/255) 
 
-    # 여백 설정
+    # 여백 설정 (기존보다 훨씬 넓게 잡음)
     L = 15*mm
     R = 15*mm
-    # [수정] 상단 여백을 더 확보 (15mm -> 20mm)
-    TOP = H - 20*mm
+    TOP = H - 30*mm  # [변경] 상단 여백 대폭 확대 (제목 잘림 방지)
     usable_w = W - L - R
 
     # 1. 문서 헤더
-    # [수정] 우측 상단 정보 배치 (날짜 아래 이름)
+    # 날짜와 이름을 분리하여 배치
     c.setFillColor(text_sub)
     c.setFont("NanumGothic", 9)
-    c.drawRightString(W - R, TOP, f"Generated: {gen_date_str}")
+    c.drawRightString(W - R, TOP + 5*mm, f"Generated: {gen_date_str}")
 
     c.setFillColor(text_main)
     c.setFont("NanumGothic-Bold", 14)
-    c.drawRightString(W - R, TOP - 6*mm, student_name)
+    c.drawRightString(W - R, TOP - 5*mm, student_name)
 
-    # [수정] 좌측 상단 타이틀 배치
-    c.setFillColor(text_main)
-    c.setFont("NanumGothic-Bold", 24)
-    c.drawString(L, TOP - 5*mm, title)
+    # 타이틀 (업데이트 확인을 위해 파란색 적용)
+    c.setFillColor(title_color) 
+    c.setFont("NanumGothic-Bold", 26)
+    c.drawString(L, TOP, title)
 
     c.setFillColor(text_sub)
     c.setFont("NanumGothic", 12)
-    c.drawString(L, TOP - 13*mm, subtitle)
+    c.drawString(L, TOP - 10*mm, subtitle)
     
-    # [수정] 헤더 구분선 위치 조정
+    # 구분선
     c.setLineWidth(1.5)
     c.setStrokeColor(header_line)
-    line_y = TOP - 20*mm
+    line_y = TOP - 18*mm
     c.line(L, line_y, W - R, line_y)
 
-    # 2. KPI 영역
-    # [수정] KPI 영역 시작 위치 및 높이 조정
+    # 2. KPI 영역 (겹침 방지)
     kpi_y = line_y - 8*mm
-    kpi_h = 32*mm  # 높이를 늘림 (25mm -> 32mm)
+    kpi_h = 40*mm  # [변경] 박스 높이를 더 늘림 (32 -> 40mm)
     gap = 8*mm
     kpi_w = (usable_w - gap) / 2
 
     def draw_kpi_simple(x, y, w, h, label, score, dt, t):
+        # 박스 그리기
         c.setLineWidth(0.5)
         c.setStrokeColor(stroke)
         c.setFillColor(colors.white)
         c.roundRect(x, y, w, h, 3*mm, fill=1, stroke=1)
         
-        # 라벨
+        # 라벨 (좌측 상단)
         c.setFillColor(text_sub)
         c.setFont("NanumGothic-Bold", 10)
         c.drawString(x + 5*mm, y + h - 8*mm, label)
         
-        # 점수
+        # 점수 (우측 상단, 크게)
         c.setFillColor(text_main)
-        c.setFont("NanumGothic-Bold", 22)
-        # [수정] 점수 위치를 내려서 라벨과 겹치지 않게 함
-        c.drawRightString(x + w - 5*mm, y + h - 18*mm, str(score))
+        c.setFont("NanumGothic-Bold", 24)
+        c.drawRightString(x + w - 5*mm, y + h - 12*mm, str(score))
         
-        # 구분선
+        # 중간 구분선
+        mid_y = y + 14*mm
         c.setLineWidth(0.5)
         c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
-        c.line(x + 3*mm, y + 11*mm, x + w - 3*mm, y + 11*mm)
+        c.line(x + 3*mm, mid_y, x + w - 3*mm, mid_y)
         
-        # 날짜/시간
+        # 날짜/시간 (줄바꿈 처리로 절대 겹치지 않게 함)
         c.setFillColor(text_sub)
-        c.setFont("NanumGothic", 8.5)
-        # [수정] Date와 Time을 두 줄로 분리하여 겹침 방지
-        c.drawString(x + 5*mm, y + 7*mm, f"Date: {dt}")
-        c.drawString(x + 5*mm, y + 3*mm, f"Time: {t}")
+        c.setFont("NanumGothic", 9)
+        c.drawString(x + 5*mm, mid_y - 5*mm, f"Date: {dt}")
+        c.drawString(x + 5*mm, mid_y - 10*mm, f"Time: {t}")
 
     draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1 Results", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
     draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
     # 3. 상세 분석 카드
-    # [수정] 상단 요소 위치 변경에 따른 시작점 조정
     cards_top = kpi_y - 8*mm 
-    card_h = 200*mm
+    card_h = 190*mm # 하단 여백 확보를 위해 높이 약간 축소
     card_y = cards_top - card_h
 
     def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
@@ -672,7 +672,7 @@ def create_report_pdf_reportlab(
         c.setStrokeColor(stroke)
         c.line(x + 2*mm, sub_header_y - 3*mm, x + w - 2*mm, sub_header_y - 3*mm)
         
-        row_h = 7.5*mm
+        row_h = 7.0*mm # 행 높이 미세 조정
         start_y = sub_header_y - 3*mm - row_h
         base_font_size = 10
         
