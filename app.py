@@ -508,8 +508,8 @@ def fit_font_size(text, font_name, max_size, min_size, max_width):
 def fit_font_size_two_lines(lines, font_name, max_size, min_size, max_width):
     need = max_size
     for ln in lines:
-        ln = ln.strip()
-        if ln == "":
+        ln = (ln or "").strip()
+        if not ln:
             continue
         need = min(need, fit_font_size(ln, font_name, max_size, min_size, max_width))
     return need
@@ -520,12 +520,6 @@ def draw_round_rect(c, x, y, w, h, r, fill, stroke, stroke_width=1):
     c.setFillColor(fill)
     c.roundRect(x, y, w, h, r, fill=1, stroke=1)
 
-def draw_text_center(c, x_center, y_baseline, text, font_name, font_size, color=colors.black):
-    c.setFont(font_name, font_size)
-    c.setFillColor(color)
-    tw = str_w(text, font_name, font_size)
-    c.drawString(x_center - tw / 2, y_baseline, text)
-
 def wr_to_text(v):
     if v is None:
         return "-"
@@ -534,64 +528,6 @@ def wr_to_text(v):
         return f"{int(round(v * 100))}%"
     except:
         return "-"
-
-def build_wrong_rate_dict_fixed_ranges(eta_xl, sheet_name="Error Analysis"):
-    df = pd.read_excel(eta_xl, sheet_name=sheet_name, header=None)
-    colC = df.iloc[:, 2].tolist()  # C열
-
-    m1_vals = colC[2:24]     # C3:C24
-    m2_vals = colC[25:47]    # C26:C47
-
-    def to_dict(vals):
-        out = {}
-        for i, v in enumerate(vals, start=1):
-            try:
-                out[i] = float(v)
-            except:
-                out[i] = None
-        return out
-
-    return to_dict(m1_vals), to_dict(m2_vals)
-
-def read_mock_answers(mock_bytes):
-    df = pd.read_excel(mock_bytes)
-    cols = set(df.columns.astype(str))
-
-    if {"모듈", "문항번호", "정답"}.issubset(cols):
-        m1 = df[df["모듈"].astype(str).str.upper().eq("M1")].set_index("문항번호")["정답"].astype(str).to_dict()
-        m2 = df[df["모듈"].astype(str).str.upper().eq("M2")].set_index("문항번호")["정답"].astype(str).to_dict()
-        m1 = {int(k): _clean(v) for k, v in m1.items() if str(k).strip().isdigit()}
-        m2 = {int(k): _clean(v) for k, v in m2.items() if str(k).strip().isdigit()}
-        return m1, m2
-
-    # fallback
-    c0, c1 = df.columns[0], df.columns[1]
-    m2_idxs = df.index[df[c0].astype(str).str.contains("Module2", case=False, na=False)].tolist()
-    if not m2_idxs:
-        out = {}
-        for _, r in df.iterrows():
-            try:
-                q = int(str(r[c0]).strip())
-            except:
-                continue
-            out[q] = _clean(r[c1])
-        return out, {}
-
-    m2i = m2_idxs[0]
-    m1_rows = df.iloc[:m2i]
-    m2_rows = df.iloc[m2i + 1:]
-
-    def rows_to_ans(rows):
-        dct = {}
-        for _, r in rows.iterrows():
-            try:
-                q = int(str(r[c0]).strip())
-            except:
-                continue
-            dct[q] = _clean(r[c1])
-        return dct
-
-    return rows_to_ans(m1_rows), rows_to_ans(m2_rows)
 
 def create_report_pdf_reportlab(
     output_path: str,
@@ -607,32 +543,32 @@ def create_report_pdf_reportlab(
     wr_m2: dict,
     wrong_m1: set,
     wrong_m2: set,
-    result_blank: bool = False,          # ✅ TEMPLATE용 Result 공란
-    footer_left_text: str = "",          # ✅ 하단왼쪽 텍스트
+    result_blank: bool = False,
+    footer_left_text: str = "",
 ):
     ensure_fonts_registered()
     c = canvas.Canvas(output_path, pagesize=A4)
     W, H = A4
 
-    # colors
-    stroke = colors.Color(203 / 255, 213 / 255, 225 / 255)
-    title_col = colors.Color(15 / 255, 23 / 255, 42 / 255)
-    muted = colors.Color(100 / 255, 116 / 255, 139 / 255)
-    pill_fill = colors.Color(241 / 255, 245 / 255, 249 / 255)
-    row_stripe = colors.Color(248 / 255, 250 / 255, 252 / 255)
-    green = colors.Color(22 / 255, 101 / 255, 52 / 255)
-    red = colors.Color(220 / 255, 38 / 255, 38 / 255)
+    # palette
+    stroke = colors.Color(203/255, 213/255, 225/255)
+    title_col = colors.Color(15/255, 23/255, 42/255)
+    muted = colors.Color(100/255, 116/255, 139/255)
+    pill_fill = colors.Color(241/255, 245/255, 249/255)
+    row_stripe = colors.Color(248/255, 250/255, 252/255)
+    green = colors.Color(22/255, 101/255, 52/255)
+    red = colors.Color(220/255, 38/255, 38/255)
 
-    # layout
+    # layout (✅ 제목이 위로 올라간 문제 해결: TOP을 더 아래로)
     L = 15 * mm
     R = 15 * mm
-    TOP = H - 18 * mm
+    TOP = H - 28 * mm   # ✅ 기존(H-18mm)보다 아래로 내림
     usable_w = W - L - R
 
-    # Generated (조금 위로)
+    # Generated (위치 약간 위로)
     c.setFont("NanumGothic", 10)
     c.setFillColor(muted)
-    c.drawRightString(W - R, TOP + 8 * mm, f"Generated: {gen_date_str}")
+    c.drawRightString(W - R, TOP + 16*mm, f"Generated: {gen_date_str}")
 
     # Title / subtitle
     c.setFillColor(title_col)
@@ -641,24 +577,24 @@ def create_report_pdf_reportlab(
 
     c.setFillColor(muted)
     c.setFont("NanumGothic", 14)
-    c.drawString(L, TOP - 11 * mm, subtitle)
+    c.drawString(L, TOP - 11*mm, subtitle)
 
     # Name pill (조금 아래로)
     pill_w = 78 * mm
     pill_h = 20 * mm
     pill_x = L + usable_w - pill_w
-    pill_y = TOP - 9 * mm  # ✅ 조금 내려줌
-    draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 10 * mm, pill_fill, stroke, 1)
+    pill_y = TOP - 12 * mm  # ✅ 조금 더 아래
+    draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 10*mm, pill_fill, stroke, 1)
 
     c.setFillColor(muted)
     c.setFont("NanumGothic-Bold", 10)
-    c.drawString(pill_x + 7 * mm, pill_y + 12.2 * mm, "Name")
+    c.drawString(pill_x + 7*mm, pill_y + 12.2*mm, "Name")
 
     c.setFillColor(title_col)
     max_name_w = pill_w - 26 * mm
     name_fs = fit_font_size(student_name, "NanumGothic-Bold", 16, 10, max_name_w)
     c.setFont("NanumGothic-Bold", name_fs)
-    c.drawRightString(pill_x + pill_w - 7 * mm, pill_y + 6.0 * mm, student_name)
+    c.drawRightString(pill_x + pill_w - 7*mm, pill_y + 6.0*mm, student_name)
 
     # divider
     line_y = TOP - 22 * mm
@@ -666,8 +602,8 @@ def create_report_pdf_reportlab(
     c.setStrokeColor(title_col)
     c.line(L, line_y, W - R, line_y)
 
-    # KPI cards (높이 줄이고, 점수/날짜 겹침 해결)
-    kpi_h = 32 * mm  # ✅ 더 줄임 (40 -> 32)
+    # KPI cards (✅ 점수 크기 줄이고 아래로 내림 + 카드 높이 약간 더 줄임)
+    kpi_h = 30 * mm   # ✅ 조금 더 줄임
     gap = 10 * mm
     kpi_w = (usable_w - gap) / 2
 
@@ -675,45 +611,42 @@ def create_report_pdf_reportlab(
     kpi_y = line_y - kpi_gap_from_line - kpi_h
 
     def draw_kpi_card(x, y, w, h, label, score, dt, t):
-        draw_round_rect(c, x, y, w, h, 8 * mm, colors.white, stroke, 1)
+        draw_round_rect(c, x, y, w, h, 8*mm, colors.white, stroke, 1)
 
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 16)
-        c.drawString(x + 8 * mm, y + h - 11 * mm, label)
+        c.drawString(x + 8*mm, y + h - 11*mm, label)
 
-        # score 조금 아래로
-        c.setFont("NanumGothic-Bold", 32)
-        c.drawRightString(x + w - 8 * mm, y + h - 13.5 * mm, str(score))
+        # ✅ 점수: 크기 조금 줄이고 + 아래로 내림
+        c.setFont("NanumGothic-Bold", 28)
+        c.drawRightString(x + w - 8*mm, y + h - 16.5*mm, str(score))
 
         # mid line
-        mid_y = y + 11 * mm
+        mid_y = y + 10.5*mm
         c.setLineWidth(0.6)
-        c.setStrokeColor(colors.Color(241 / 255, 245 / 255, 249 / 255))
-        c.line(x + 6 * mm, mid_y, x + w - 6 * mm, mid_y)
+        c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
+        c.line(x + 6*mm, mid_y, x + w - 6*mm, mid_y)
 
-        # Date/Time 글자 줄이고, 겹침 방지 배치
+        # ✅ Date/Time: 글자 더 줄이고 좌/우로 분리
         c.setFillColor(muted)
-        c.setFont("NanumGothic", 9)  # ✅ 더 작게
-        c.drawString(x + 8 * mm, y + 5.2 * mm, f"{dt}")
-
-        c.setFont("NanumGothic", 9)
-        c.drawRightString(x + w - 8 * mm, y + 5.2 * mm, f"{t}")
+        c.setFont("NanumGothic", 8)   # ✅ 더 작게
+        c.drawString(x + 8*mm, y + 4.8*mm, f"{dt}")
+        c.drawRightString(x + w - 8*mm, y + 4.8*mm, f"{t}")
 
     draw_kpi_card(L, kpi_y, kpi_w, kpi_h, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
     draw_kpi_card(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-    # Analysis tables start
+    # Tables start
     cards_top = kpi_y - 8 * mm
-    card_gap_bottom = 14 * mm  # 하단 푸터/여백용
-    card_h = cards_top - (20 * mm)  # 대략값(아래에서 끝 맞춤)
-    # ✅ 22번 끝줄에 표도 끝나게: row_h로 높이를 계산해서 card_h 결정
-    header_h = 8.5 * mm
-    table_header_gap = 7.5 * mm
-    row_h = 6.3 * mm
-    top_padding = 6.5 * mm
-    bottom_padding = 6.0 * mm
-    card_h = top_padding + header_h + table_header_gap + (22 * row_h) + bottom_padding
 
+    # ✅ 행 높이 더 줄임
+    header_h = 8.0 * mm
+    row_h = 5.6 * mm  # ✅ 6.3 -> 5.6
+    top_padding = 7.0 * mm
+    bottom_padding = 6.0 * mm
+
+    # 표 전체 높이(22줄 딱 맞게)
+    card_h = top_padding + header_h + (22 * row_h) + bottom_padding
     card_y = cards_top - card_h
 
     card_w = kpi_w
@@ -721,25 +654,28 @@ def create_report_pdf_reportlab(
     right_x = L + card_w + gap
 
     def draw_table(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
-        draw_round_rect(c, x, y, w, h, 10 * mm, colors.white, stroke, 1)
+        draw_round_rect(c, x, y, w, h, 10*mm, colors.white, stroke, 1)
 
-        # title (검은 캡 제거, 그냥 텍스트)
+        # module label
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 14)
-        c.drawString(x + 9 * mm, y + h - 12 * mm, module_name)
+        c.drawString(x + 9*mm, y + h - 12*mm, module_name)
 
-        # column header
-        strip_y = y + h - 22.5 * mm
-        strip_h = 8.5 * mm
-        draw_round_rect(c, x + 6 * mm, strip_y, w - 12 * mm, strip_h, 6 * mm, pill_fill, stroke, 1)
+        # ✅ 헤더: 둥근 pill 제거 → 네모 rect
+        strip_y = y + h - 22.0 * mm
+        strip_h = header_h
+        c.setLineWidth(1)
+        c.setStrokeColor(stroke)
+        c.setFillColor(pill_fill)
+        c.rect(x + 6*mm, strip_y, w - 12*mm, strip_h, stroke=1, fill=1)
 
         inner_x = x + 8 * mm
         inner_w = w - 16 * mm
 
-        # ✅ Answer 칸을 줄이고 정답률/Result를 넓힘
+        # ✅ Answer 칸 다시 키움 (너무 줄어든 문제 해결)
         col_q = 10 * mm
-        col_ans = 18 * mm
-        col_wr = 22 * mm
+        col_ans = 26 * mm   # ✅ 18 -> 26
+        col_wr = 20 * mm
         col_res = inner_w - (col_q + col_ans + col_wr)
 
         q_center = inner_x + col_q / 2
@@ -747,27 +683,28 @@ def create_report_pdf_reportlab(
         wr_center = inner_x + col_q + col_ans + col_wr / 2
         res_center = inner_x + col_q + col_ans + col_wr + col_res / 2
 
-        header_text_y = strip_y + 2.5 * mm
-        draw_text_center(c, q_center, header_text_y, "No.", "NanumGothic-Bold", 9.5, muted)
-        draw_text_center(c, ans_center, header_text_y, "Answer", "NanumGothic-Bold", 9.5, muted)
-        draw_text_center(c, wr_center, header_text_y, "정답률", "NanumGothic-Bold", 9.5, muted)
-        draw_text_center(c, res_center, header_text_y, "Result", "NanumGothic-Bold", 9.5, muted)
+        header_text_y = strip_y + 2.2 * mm
+        c.setFillColor(muted)
+        c.setFont("NanumGothic-Bold", 9.5)
+        c.drawCentredString(q_center, header_text_y, "No.")
+        c.drawCentredString(ans_center, header_text_y, "Answer")
+        c.drawCentredString(wr_center, header_text_y, "정답률")
+        c.drawCentredString(res_center, header_text_y, "Result")
 
-        start_y = strip_y - 2.1 * mm - row_h
-        base = 1.6 * mm
+        start_y = strip_y - 2.0*mm - row_h
+        base = 1.35 * mm
 
         for i, q in enumerate(range(1, 23)):
             ry = start_y - i * row_h
 
-            # stripe
             if q % 2 == 0:
                 c.setFillColor(row_stripe)
                 c.setStrokeColor(row_stripe)
-                c.roundRect(x + 6 * mm, ry, w - 12 * mm, row_h, 6 * mm, fill=1, stroke=0)
+                c.rect(x + 6*mm, ry, w - 12*mm, row_h, stroke=0, fill=1)
 
             ans_raw = _clean(ans_dict.get(q, ""))
             lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
-            lines = [ln.strip() for ln in lines if ln.strip() != ""]
+            lines = [ln.strip() for ln in lines if ln.strip()]
             if not lines:
                 lines = [""]
 
@@ -777,25 +714,27 @@ def create_report_pdf_reportlab(
             rate_val = wr_dict.get(q, None)
             wr_txt = wr_to_text(rate_val)
 
-            # ✅ Result 공란 옵션
             if result_blank:
                 res_txt = ""
             else:
                 res_txt = "X" if q in wrong_set else "O"
 
             # No.
-            draw_text_center(c, q_center, ry + base, str(q), "NanumGothic", 10.2, title_col)
+            c.setFillColor(title_col)
+            c.setFont("NanumGothic", 10.0)
+            c.drawCentredString(q_center, ry + base, str(q))
 
-            # Answer (작게)
-            ans_max_w = col_ans - 3 * mm
-            fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 10.0, 6.6, ans_max_w)
+            # Answer
+            ans_max_w = col_ans - 3*mm
+            fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 10.0, 7.0, ans_max_w)
+            c.setFont("NanumGothic-Bold", fs)
             if len(lines) == 1:
-                draw_text_center(c, ans_center, ry + base, lines[0], "NanumGothic-Bold", fs, title_col)
+                c.drawCentredString(ans_center, ry + base, lines[0])
             else:
-                draw_text_center(c, ans_center, ry + (base + 0.75 * mm), lines[0], "NanumGothic-Bold", fs, title_col)
-                draw_text_center(c, ans_center, ry + (base - 0.75 * mm), lines[1], "NanumGothic-Bold", fs, title_col)
+                c.drawCentredString(ans_center, ry + base + 0.7*mm, lines[0])
+                c.drawCentredString(ans_center, ry + base - 0.7*mm, lines[1])
 
-            # 정답률 (50% 미만 굵게)
+            # 정답률
             is_low = False
             try:
                 if rate_val is not None and float(rate_val) < 0.5:
@@ -803,27 +742,32 @@ def create_report_pdf_reportlab(
             except:
                 pass
 
+            c.setFillColor(title_col)
             if is_low:
-                draw_text_center(c, wr_center, ry + base, wr_txt, "NanumGothic-Bold", 10.6, title_col)
+                c.setFont("NanumGothic-Bold", 10.3)
             else:
-                draw_text_center(c, wr_center, ry + base, wr_txt, "NanumGothic", 10.2, title_col)
+                c.setFont("NanumGothic", 10.0)
+            c.drawCentredString(wr_center, ry + base, wr_txt)
 
             # Result
-            if res_txt == "":
-                # 템플릿 공란
-                draw_text_center(c, res_center, ry + base, "", "NanumGothic-Bold", 11.6, title_col)
-            else:
+            if res_txt:
                 ox_color = red if res_txt == "X" else green
-                draw_text_center(c, res_center, ry + base, res_txt, "NanumGothic-Bold", 11.6, ox_color)
+                c.setFillColor(ox_color)
+                c.setFont("NanumGothic-Bold", 11.0)
+                c.drawCentredString(res_center, ry + base, res_txt)
 
     draw_table(left_x, card_y, card_w, card_h, "Module 1", ans_m1, wr_m1, wrong_m1)
     draw_table(right_x, card_y, card_w, card_h, "Module 2", ans_m2, wr_m2, wrong_m2)
 
-    # Footer left (글자 8)
+    # ✅ Footer left: 줄바꿈 출력되게 (ReportLab은 \n 자동 줄바꿈 안 됨)
     if footer_left_text:
         c.setFillColor(title_col)
         c.setFont("NanumGothic", 8)
-        c.drawString(L, 12 * mm, footer_left_text)
+        lines = str(footer_left_text).splitlines()  # "Kakaotalk...\nPhone..." 형태
+        y0 = 12 * mm
+        line_gap = 4.2 * mm
+        for idx, ln in enumerate(lines):
+            c.drawString(L, y0 + (len(lines)-1-idx)*line_gap, ln)
 
     c.showPage()
     c.save()
