@@ -742,7 +742,7 @@ with tab3:
         if v is None:
             return "-"
         try:
-             v = float(v)
+            v = float(v)
             # [수정] 정답률이므로 0%도 100%도 모두 의미가 있음. 무조건 표시.
             return f"{int(round(v * 100))}%"
         except:
