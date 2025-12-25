@@ -594,36 +594,34 @@ def create_report_pdf_reportlab(
     line_y = TOP - 18*mm
     c.line(L, line_y, W - R, line_y)
 
-    # 2. KPI 영역 (겹침 방지)
-    kpi_y = line_y - 8*mm
-    kpi_h = 40*mm  # [변경] 박스 높이를 더 늘림 (32 -> 40mm)
-    gap = 8*mm
-    kpi_w = (usable_w - gap) / 2
+    # 2. KPI 영역 (겹침 방지)  ✅ 여기만 수정
+    # 구분선(line_y) 바로 아래에 KPI가 오도록: "bottom y"를 계산해줌
+        kpi_h = 40*mm
+        gap = 8*mm
+        kpi_w = (usable_w - gap) / 2
+
+        kpi_gap_from_line = 6*mm  # 구분선과 KPI 사이 간격
+        kpi_y = line_y - kpi_gap_from_line - kpi_h  # ✅ (중요) KPI의 bottom y
 
     def draw_kpi_simple(x, y, w, h, label, score, dt, t):
-        # 박스 그리기
         c.setLineWidth(0.5)
         c.setStrokeColor(stroke)
         c.setFillColor(colors.white)
         c.roundRect(x, y, w, h, 3*mm, fill=1, stroke=1)
-        
-        # 라벨 (좌측 상단)
+
         c.setFillColor(text_sub)
         c.setFont("NanumGothic-Bold", 10)
         c.drawString(x + 5*mm, y + h - 8*mm, label)
-        
-        # 점수 (우측 상단, 크게)
+
         c.setFillColor(text_main)
         c.setFont("NanumGothic-Bold", 24)
         c.drawRightString(x + w - 5*mm, y + h - 12*mm, str(score))
-        
-        # 중간 구분선
+
         mid_y = y + 14*mm
         c.setLineWidth(0.5)
         c.setStrokeColor(colors.Color(241/255, 245/255, 249/255))
         c.line(x + 3*mm, mid_y, x + w - 3*mm, mid_y)
-        
-        # 날짜/시간 (줄바꿈 처리로 절대 겹치지 않게 함)
+
         c.setFillColor(text_sub)
         c.setFont("NanumGothic", 9)
         c.drawString(x + 5*mm, mid_y - 5*mm, f"Date: {dt}")
@@ -632,10 +630,10 @@ def create_report_pdf_reportlab(
     draw_kpi_simple(L, kpi_y, kpi_w, kpi_h, "Module 1 Results", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
     draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
-    # 3. 상세 분석 카드
-    cards_top = kpi_y - 8*mm 
-    card_h = 190*mm # 하단 여백 확보를 위해 높이 약간 축소
-    card_y = cards_top - card_h
+        # 3. 상세 분석 카드 시작점도 KPI 아래로 자연스럽게
+    cards_gap_from_kpi = 10*mm
+    cards_top = kpi_y - cards_gap_from_kpi
+
 
     def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
         c.setLineWidth(0.5)
