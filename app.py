@@ -631,9 +631,8 @@ def create_report_pdf_reportlab(
     draw_kpi_simple(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2 Results", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
 
         # 3. 상세 분석 카드 시작점도 KPI 아래로 자연스럽게
-    cards_gap_from_kpi = 10*mm
-    cards_top = kpi_y - cards_gap_from_kpi
-
+    cards_top = kpi_y - 8*mm
+    card_y = cards_top - card_h
 
     def draw_analysis_list(x, y, w, h, module_name, ans_dict, wr_dict, wrong_set):
         c.setLineWidth(0.5)
