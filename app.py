@@ -2029,63 +2029,56 @@ with tab4:
         inner_y_top = domain_y + domain_h - 12.5*mm   # (기존 -20mm → -15mm)
         inner_w = domain_w - 16*mm
 
-
-        # 우측 difficulty 박스
-        diff_box_w = 48 * mm
-        diff_box_h = 26 * mm
+        # 우측 difficulty 박스 (크기 조정: 퍼센트까지 넣으려면 48x26은 작음)
+        diff_box_w = 66 * mm
+        diff_box_h = 32 * mm
         diff_box_x = inner_x + inner_w - diff_box_w
         diff_box_y = inner_y_top - diff_box_h + 2*mm
-        draw_round_rect4(c, diff_box_x, diff_box_y, diff_box_w, diff_box_h, 6*mm, colors.white, stroke, 1)
+        draw_round_rect4(c, diff_box_x, diff_box_y, diff_box_w, diff_box_h, 7*mm, colors.white, stroke, 1)
 
+        # 헤더
         c.setFillColor(title_col)
-        c.setFont("NanumGothic-Bold", 9.5)
-        c.drawString(diff_box_x + 6*mm, diff_box_y + diff_box_h - 7*mm, "Difficulty")
-  
+        c.setFont("NanumGothic-Bold", 11)
+        c.drawString(diff_box_x + 7*mm, diff_box_y + diff_box_h - 8.5*mm, "Difficulty")
+
         def pct_str(ok, tot):
             if tot <= 0:
                 return "-"
             return f"{int(round((ok/tot)*100))}% ({ok}/{tot})"
 
-        # ✅ E/M/H 한 글자만 Bold + 나머지(asy/edium/ard)는 Regular
-        labels = [("E", "asy"), ("M", "edium"), ("H", "ard")]
+        # ✅ 한 루프에서 "E만 Bold + Easy/Medium/Hard + 오른쪽 퍼센트" 모두 처리
+        rows = [
+            ("E", "asy",   "Easy",   dif_stats["E"]),
+            ("M", "edium", "Medium", dif_stats["M"]),
+            ("H", "ard",   "Hard",   dif_stats["H"]),
+        ]
 
-        y0 = diff_box_y + diff_box_h - 18*mm
-        row_step = 8.6 * mm
-        x0 = diff_box_x + 8*mm
+        x_left = diff_box_x + 7*mm
+        x_val_r = diff_box_x + diff_box_w - 7*mm
 
-        for i, (b, rest) in enumerate(labels):
+        # 행 시작 위치(헤더 아래)
+        y0 = diff_box_y + diff_box_h - 15.5*mm
+        row_step = 7.2 * mm
+
+        for i, (b, rest, full, stt) in enumerate(rows):
             y = y0 - i * row_step
-    
-            # 첫 글자 Bold
+
+            # E/M/H (Bold)
             c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 15)
-            c.drawString(x0, y, b)
+            c.setFont("NanumGothic-Bold", 12)
+            c.drawString(x_left, y, b)
 
-            # 나머지 Regular (첫 글자 폭만큼 오른쪽으로)
-            b_w = pdfmetrics.stringWidth(b, "NanumGothic-Bold", 15)
-            c.setFont("NanumGothic", 15)
-            c.drawString(x0 + b_w, y, rest)
+            # 나머지 글자(asy/edium/ard) Regular
+            b_w = pdfmetrics.stringWidth(b, "NanumGothic-Bold", 12)
+            c.setFont("NanumGothic", 12)
+            c.drawString(x_left + b_w, y, rest)
 
-        y_line = diff_box_y + diff_box_h - 13*mm
-        for code, full, stt in dif_rows:
-            # 왼쪽: E/M/H Bold
-            c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 10.8)
-            c.drawString(diff_box_x + 6*mm, y_line, code)
+            # 오른쪽 퍼센트 (작게, 우측정렬)
+            c.setFont("NanumGothic", 9.5)
+            c.setFillColor(muted)
+            c.drawRightString(x_val_r, y + 0.2*mm, pct_str(stt["ok"], stt["tot"]))
 
-            # 옆: Easy/Medium/Hard (일반)
-            c.setFont("NanumGothic", 10.0)
-            c.drawString(diff_box_x + 12*mm, y_line, full)
 
-            # 오른쪽: 95% (20/21)
-            c.setFont("NanumGothic", 9.6)
-            c.drawRightString(
-                diff_box_x + diff_box_w - 6*mm,
-                y_line,
-                pct_str(stt["ok"], stt["tot"])
-            )
-
-            y_line -= 6.2*mm
 
 
         # 7개 막대그래프(좌측)
