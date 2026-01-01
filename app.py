@@ -2068,7 +2068,7 @@ with tab4:
         # ✅ 세로 중앙 정렬 (3줄이 박스 중앙에 오도록)
         row_step = 8.0 * mm            # 줄 겹치면 8.4~8.8로
         y_mid = diff_box_y + diff_box_h / 2
-        y0 = y_mid + row_step -1.2mm          # 첫 줄 baseline (Easy)
+        y0 = y_mid + row_step - 1.2*mm          # 첫 줄 baseline (Easy)
 
         for i, (b, rest, stt) in enumerate(rows):
             y = y0 - i * row_step
