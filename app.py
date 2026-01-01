@@ -453,7 +453,7 @@ with tab1:
     st.subheader("📊 예시 엑셀 양식")
 
     with st.expander("예시 엑셀파일 미리보기 (클릭하여 열기)"):
-        st.dataframe(example_input_df(), use_container_width=True)
+        st.dataframe(example_input_df(), width='stretch')
 
     example = get_example_excel()
     st.download_button(
