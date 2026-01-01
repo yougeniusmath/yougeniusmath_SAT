@@ -2000,7 +2000,7 @@ with tab4:
                         dif_stats[d]["ok"] += 1
 
         # 카드 위치/크기
-        domain_h = 65 * mm
+        domain_h = 63 * mm
         domain_gap = 4 * mm
         domain_y = card_y - domain_gap - domain_h
         domain_x = L
@@ -2030,7 +2030,7 @@ with tab4:
         inner_w = domain_w - 16*mm
 
         # 우측 difficulty 박스 (크기 조정: 퍼센트까지 넣으려면 48x26은 작음)
-        diff_box_w = 66 * mm
+        diff_box_w = 48 * mm
         diff_box_h = 32 * mm
         diff_box_x = inner_x + inner_w - diff_box_w
         diff_box_y = inner_y_top - diff_box_h + 2*mm
@@ -2065,12 +2065,12 @@ with tab4:
 
             # E/M/H (Bold)
             c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 12)
+            c.setFont("NanumGothic-Bold", 10)
             c.drawString(x_left, y, b)
 
             # 나머지 글자(asy/edium/ard) Regular
-            b_w = pdfmetrics.stringWidth(b, "NanumGothic-Bold", 12)
-            c.setFont("NanumGothic", 12)
+            b_w = pdfmetrics.stringWidth(b, "NanumGothic-Bold", 10)
+            c.setFont("NanumGothic", 10)
             c.drawString(x_left + b_w, y, rest)
 
             # 오른쪽 퍼센트 (작게, 우측정렬)
