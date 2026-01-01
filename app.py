@@ -2022,7 +2022,7 @@ with tab4:
         # 제목
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 12)
-        c.drawString(domain_x + 8*mm, domain_y + domain_h - 10*mm, "Domain Breakdown")
+        c.drawString(domain_x + 8*mm, domain_y + domain_h - 10*mm, "Topic")
 
         c.setFillColor(muted)
         c.setFont("NanumGothic", 9)
@@ -2068,11 +2068,21 @@ with tab4:
         chart_x = inner_x
         chart_y_top = inner_y_top - 3*mm
 
+        # ✅ 여기만 조절하면 됨 (Topic 글자 영역 줄이기)
+        label_w = 50 * mm      # (기존 62mm → 50mm로 축소)
+        value_w = 18 * mm      # 오른쪽 (ok/tot)용
+
         row_gap = 6.4 * mm
-        bar_h = 4.2 * mm
-        label_w = 62 * mm
-        value_w = 20 * mm
+        bar_h = 4.6 * mm       # %를 막대 안에 넣을 거라 살짝 키움
         bar_max_w = max(10*mm, chart_w - label_w - value_w - 4*mm)
+
+        # ✅ 낮은 Topic 기준(원하면 0.6, 0.7 등으로 바꿔도 됨)
+        LOW_TOPIC_PCT = 0.70
+
+        # 색상
+        bar_track = colors.Color(226/255, 232/255, 240/255)     # 연회색(track)
+        bar_fill  = colors.Color(191/255, 219/255, 254/255)     # 연파랑(fill)
+        bar_fill_low = colors.Color(30/255, 64/255, 175/255)    # ✅ 남색(low fill)
 
         for idx, major in enumerate(range(1, 8)):
             y = chart_y_top - idx * row_gap
@@ -2082,41 +2092,60 @@ with tab4:
             ok, tot = stt["ok"], stt["tot"]
             pct = (ok / tot) if tot > 0 else None
 
-            # 라벨(5번 줄바꿈)
+            # --- 라벨(왼쪽) ---
             c.setFillColor(title_col)
             if major == 5:
-                c.setFont("NanumGothic", 8.3)
-                c.drawString(chart_x, y + 1.2*mm, "5. Polynomials, radical")
-                c.drawString(chart_x, y - 2.2*mm, "   and rational functions")
+                c.setFont("NanumGothic", 8.2)
+                c.drawString(chart_x, y + 1.1*mm, "5. Polynomials, radical")
+                c.drawString(chart_x, y - 2.3*mm, "   and rational functions")
             else:
                 c.setFont("NanumGothic", 8.6)
                 c.drawString(chart_x, y, label.replace("\n", " "))
 
-            # track
+            # --- 막대 track ---
             track_x = chart_x + label_w
-            track_y = y - 1.8*mm
+            track_y = y - 2.0*mm
             c.setFillColor(bar_track)
             c.setStrokeColor(bar_track)
             c.rect(track_x, track_y, bar_max_w, bar_h, stroke=0, fill=1)
 
-            # fill
+            # --- 막대 fill ---
             fill_w = (bar_max_w * pct) if pct is not None else 0
-            c.setFillColor(bar_fill)
-            c.setStrokeColor(bar_fill)
+
+            is_low = (pct is not None and pct < LOW_TOPIC_PCT)
+            fill_color = bar_fill_low if is_low else bar_fill
+
+            c.setFillColor(fill_color)
+            c.setStrokeColor(fill_color)
             c.rect(track_x, track_y, fill_w, bar_h, stroke=0, fill=1)
 
-            # 오른쪽 값 텍스트
-            val_txt = "-" if pct is None else f"{int(round(pct*100))}%"
-            c.setFillColor(muted)
-            c.setFont("NanumGothic", 8.6)
-            c.drawRightString(chart_x + label_w + bar_max_w + value_w, y, val_txt)
+            # ✅ %를 막대 안에 "검정색"으로 표시
+            if pct is not None and tot > 0:
+                pct_txt = f"{int(round(pct*100))}%"
+                c.setFillColor(title_col)          # ✅ 검정/진남색 계열 글자
+                c.setFont("NanumGothic-Bold", 8.2)
 
-            # (ok/tot)
-            c.setFont("NanumGothic", 8.0)
+                # 텍스트를 fill 안쪽 오른쪽에 최대한 붙이되,
+                # fill이 너무 짧으면 track 시작쪽에서 보이게 처리
+                txt_w = pdfmetrics.stringWidth(pct_txt, "NanumGothic-Bold", 8.2)
+                pad = 1.4 * mm
+
+                # 기본: fill 끝 - pad (오른쪽 정렬 느낌)
+                x_right = track_x + fill_w - pad
+                x_left_min = track_x + pad
+                x_right_max = track_x + bar_max_w - pad
+
+                # fill이 너무 짧아서 텍스트가 못 들어가면, 그냥 track 안 왼쪽에 표시
+                x_draw = max(x_left_min, min(x_right - txt_w, x_right_max - txt_w))
+                c.drawString(x_draw, track_y + 1.15*mm, pct_txt)
+
+            # --- 오른쪽 (ok/tot)만 유지 (기존 %는 막대 안으로 이동했으니 제거) ---
+            c.setFillColor(muted)
+            c.setFont("NanumGothic", 8.2)
             c.drawRightString(
                 chart_x + label_w + bar_max_w + value_w,
-                y - 3.0*mm,
-                f"{ok}/{tot}" if tot > 0 else ""
+                y - 1.0*mm,
+                f"{ok}/{tot}" if tot > 0 else "-"
             )
 
 
