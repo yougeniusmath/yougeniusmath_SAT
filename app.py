@@ -2026,7 +2026,7 @@ with tab4:
 
         # 내부 영역 시작 y도 조금 올림(설명줄 없어진 만큼)
         inner_x = domain_x + 8*mm
-        inner_y_top = domain_y + domain_h - 15*mm   # (기존 -20mm → -15mm)
+        inner_y_top = domain_y + domain_h - 11*mm   # (기존 -20mm → -15mm)
         inner_w = domain_w - 16*mm
 
 
@@ -2040,10 +2040,7 @@ with tab4:
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 9.5)
         c.drawString(diff_box_x + 6*mm, diff_box_y + diff_box_h - 7*mm, "Difficulty")
-        c.setFillColor(muted)
-        c.setFont("NanumGothic", 9.5)
-        c.drawRightString(diff_box_x + diff_box_w - 6*mm, diff_box_y + diff_box_h - 7*mm, "Accuracy")
-
+  
         def pct_str(ok, tot):
             if tot <= 0:
                 return "-"
@@ -2076,7 +2073,7 @@ with tab4:
                 pct_str(stt["ok"], stt["tot"])
             )
 
-        y_line -= 6.2*mm
+            y_line -= 6.2*mm
 
 
         # 7개 막대그래프(좌측)
