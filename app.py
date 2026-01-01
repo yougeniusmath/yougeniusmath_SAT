@@ -1349,6 +1349,7 @@ with tab3:
             st.exception(e)
 
 
+
 # ---------------------------------------------------------
 # [Tab 4] 개인 성적표 + 단원/난이도 + HTML 스타일 Topic 패널
 # (✅ Tab1~Tab3 건드리지 않음 / Tab4만 추가)
@@ -2162,4 +2163,59 @@ with tab4:
 
             try:
                 png_bytes = render_pdf_first_page_to_png_bytes(template_pdf, zoom=2.0)
-                template_png = os.path.join(output_dir, f"Repor
+                template_png = os.path.join(output_dir, f"Report_{generated_date4.strftime('%Y%m%d')}.png")
+                with open(template_png, "wb") as f:
+                    f.write(png_bytes)
+                made_images.append(("Report", template_png))
+            except:
+                pass
+
+            if not made_files:
+                st.warning("생성된 PDF가 없습니다. (QuizResults 점수 blank로 모두 제외되었을 수 있어요)")
+                if skipped:
+                    with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
+                        for s in skipped:
+                            st.write(f"- {s}")
+                st.stop()
+
+            # PDF ZIP
+            pdf_zip_buf = io.BytesIO()
+            with zipfile.ZipFile(pdf_zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for stu, path in made_files:
+                    if os.path.exists(path):
+                        z.write(path, arcname=os.path.basename(path))
+            pdf_zip_buf.seek(0)
+
+            # PNG ZIP
+            img_zip_buf = io.BytesIO()
+            with zipfile.ZipFile(img_zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for stu, path in made_images:
+                    if os.path.exists(path):
+                        z.write(path, arcname=os.path.basename(path))
+            img_zip_buf.seek(0)
+
+            st.success(f"✅ Tab4 생성 완료: PDF {len(made_files)}개 / 이미지 {len(made_images)}개 (제외: {len(skipped)}명)")
+            if skipped:
+                with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
+                    for s in skipped:
+                        st.write(f"- {s}")
+
+            st.download_button(
+                "📦 Tab4 개인 성적표 PDF ZIP 다운로드",
+                data=pdf_zip_buf,
+                file_name=f"개인성적표_Tab4_PDF_{generated_date4.strftime('%Y%m%d')}.zip",
+                mime="application/zip",
+                key="t4_download_pdf_zip"
+            )
+
+            st.download_button(
+                "🖼️ Tab4 개인 성적표 이미지(PNG) ZIP 다운로드",
+                data=img_zip_buf,
+                file_name=f"개인성적표_Tab4_PNG_{generated_date4.strftime('%Y%m%d')}.zip",
+                mime="application/zip",
+                key="t4_download_png_zip"
+            )
+
+        except Exception as e:
+            st.error(f"오류 발생: {e}")
+            st.exception(e)
