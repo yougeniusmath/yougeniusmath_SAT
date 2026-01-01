@@ -2026,7 +2026,7 @@ with tab4:
 
         # 내부 영역 시작 y도 조금 올림(설명줄 없어진 만큼)
         inner_x = domain_x + 8*mm
-        inner_y_top = domain_y + domain_h - 12.5*mm   # (기존 -20mm → -15mm)
+        inner_y_top = domain_y + domain_h - 13*mm   # (기존 -20mm → -15mm)
         inner_w = domain_w - 16*mm
 
         # 우측 difficulty 박스 (박스 크기는 그대로 사용)
@@ -2063,7 +2063,7 @@ with tab4:
         # ✅ 오른쪽 정렬 기준선 2개 (퍼센트 / 분수)
         #    (ok/tot)는 맨 오른쪽, %는 그 왼쪽에 "고정 폭"으로 정렬
         x_frac_r = x_right
-        x_pct_r  = x_right - 11 * mm   # 간격: 16~22mm 사이로 취향 조절
+        x_pct_r  = x_right - 12 * mm   # 간격: 16~22mm 사이로 취향 조절
 
         # ✅ 세로 중앙 정렬 (3줄이 박스 중앙에 오도록)
         row_step = 8.0 * mm            # 줄 겹치면 8.4~8.8로
