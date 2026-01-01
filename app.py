@@ -1631,7 +1631,7 @@ with tab4:
 
         c.setFillColor(title_col)
         c.setFont("NanumGothic-Bold", 9.5)
-        c.drawString(box_x + 4*mm, box_y + box_h - 7*mm, "Difficulty Accuracy")
+        c.drawString(box_x + 4*mm, box_y + box_h - 7*mm, "Difficulty")
 
         c.setFont("NanumGothic", 9)
         c.setFillColor(muted)
@@ -2019,19 +2019,16 @@ with tab4:
 
         draw_round_rect4(c, domain_x, domain_y, domain_w, domain_h, 10*mm, colors.white, stroke, 1)
 
-        # 제목
+        # 제목만 (설명줄 삭제 + 살짝 위로)
         c.setFillColor(title_col)
-        c.setFont("NanumGothic-Bold", 12)
-        c.drawString(domain_x + 8*mm, domain_y + domain_h - 10*mm, "Topic")
+        c.setFont("NanumGothic-Bold", 12.5)
+        c.drawString(domain_x + 8*mm, domain_y + domain_h - 9*mm, "Topic")
 
-        c.setFillColor(muted)
-        c.setFont("NanumGothic", 9)
-        c.drawString(domain_x + 8*mm, domain_y + domain_h - 16*mm, "Topic Accuracy (group by first digit 1–7)")
-
-        # 내부 영역
+        # 내부 영역 시작 y도 조금 올림(설명줄 없어진 만큼)
         inner_x = domain_x + 8*mm
-        inner_y_top = domain_y + domain_h - 20*mm
+        inner_y_top = domain_y + domain_h - 15*mm   # (기존 -20mm → -15mm)
         inner_w = domain_w - 16*mm
+
 
         # 우측 difficulty 박스
         diff_box_w = 48 * mm
@@ -2053,15 +2050,34 @@ with tab4:
             return f"{int(round((ok/tot)*100))}% ({ok}/{tot})"
 
         # E/M/H rows
-        dif_rows = [("E", dif_stats["E"]), ("M", dif_stats["M"]), ("H", dif_stats["H"])]
+        # Easy/Medium/Hard로 표기 + (E/M/H만 Bold)
+        dif_rows = [
+             ("E", "Easy",   dif_stats["E"]),
+            ("M", "Medium", dif_stats["M"]),
+            ("H", "Hard",   dif_stats["H"]),
+        ]
+
         y_line = diff_box_y + diff_box_h - 13*mm
-        for lab, stt in dif_rows:
+        for code, full, stt in dif_rows:
+            # 왼쪽: E/M/H Bold
             c.setFillColor(title_col)
-            c.setFont("NanumGothic-Bold", 11 if lab == "H" else 10.5)
-            c.drawString(diff_box_x + 6*mm, y_line, lab)
-            c.setFont("NanumGothic", 9.5)
-            c.drawRightString(diff_box_x + diff_box_w - 6*mm, y_line, pct_str(stt["ok"], stt["tot"]))
-            y_line -= 6.2*mm
+            c.setFont("NanumGothic-Bold", 10.8)
+            c.drawString(diff_box_x + 6*mm, y_line, code)
+
+            # 옆: Easy/Medium/Hard (일반)
+            c.setFont("NanumGothic", 10.0)
+            c.drawString(diff_box_x + 12*mm, y_line, full)
+
+            # 오른쪽: 95% (20/21)
+            c.setFont("NanumGothic", 9.6)
+            c.drawRightString(
+                diff_box_x + diff_box_w - 6*mm,
+                y_line,
+                pct_str(stt["ok"], stt["tot"])
+            )
+
+        y_line -= 6.2*mm
+
 
         # 7개 막대그래프(좌측)
         chart_w = inner_w - diff_box_w - 6*mm
@@ -2082,7 +2098,7 @@ with tab4:
         # 색상
         bar_track = colors.Color(226/255, 232/255, 240/255)     # 연회색(track)
         bar_fill  = colors.Color(191/255, 219/255, 254/255)     # 연파랑(fill)
-        bar_fill_low = colors.Color(30/255, 64/255, 175/255)    # ✅ 남색(low fill)
+        bar_fill_low = colors.Color(248/255, 200/255, 214/255)    #  파스텔 핑크(low fill)
 
         for idx, major in enumerate(range(1, 8)):
             y = chart_y_top - idx * row_gap
