@@ -1880,7 +1880,7 @@ with tab4:
             c.drawCentredString(cx_wr, header_text_y, "정답률")
             c.drawCentredString(cx_res, header_text_y, "Result")
             c.drawCentredString(cx_diff, header_text_y, "난이도")
-            c.drawCentredString(cx_top, header_text_y, "Topic")
+            c.drawCentredString(cx_top, header_text_y, "단원")
 
             start_y = strip_y - 0.5*mm - row_h
             base = 1.15*mm
@@ -2000,14 +2000,14 @@ with tab4:
                         dif_stats[d]["ok"] += 1
 
         # 카드 위치/크기
-        domain_h = 55 * mm
+        domain_h = 65 * mm
         domain_gap = 4 * mm
         domain_y = card_y - domain_gap - domain_h
         domain_x = L
         domain_w = usable_w
 
         # footer 침범 방지
-        min_bottom = 22 * mm
+        min_bottom = 20 * mm
         if domain_y < min_bottom:
             shrink = (min_bottom - domain_y)
             domain_h = max(40 * mm, domain_h - shrink)
@@ -2026,7 +2026,7 @@ with tab4:
 
         # 내부 영역 시작 y도 조금 올림(설명줄 없어진 만큼)
         inner_x = domain_x + 8*mm
-        inner_y_top = domain_y + domain_h - 11*mm   # (기존 -20mm → -15mm)
+        inner_y_top = domain_y + domain_h - 12.5*mm   # (기존 -20mm → -15mm)
         inner_w = domain_w - 16*mm
 
 
@@ -2046,13 +2046,25 @@ with tab4:
                 return "-"
             return f"{int(round((ok/tot)*100))}% ({ok}/{tot})"
 
-        # E/M/H rows
-        # Easy/Medium/Hard로 표기 + (E/M/H만 Bold)
-        dif_rows = [
-             ("E", "Easy",   dif_stats["E"]),
-            ("M", "Medium", dif_stats["M"]),
-            ("H", "Hard",   dif_stats["H"]),
-        ]
+        # ✅ E/M/H 한 글자만 Bold + 나머지(asy/edium/ard)는 Regular
+        labels = [("E", "asy"), ("M", "edium"), ("H", "ard")]
+
+        y0 = diff_box_y + diff_box_h - 18*mm
+        row_step = 8.6 * mm
+        x0 = diff_box_x + 8*mm
+
+        for i, (b, rest) in enumerate(labels):
+            y = y0 - i * row_step
+    
+            # 첫 글자 Bold
+            c.setFillColor(title_col)
+            c.setFont("NanumGothic-Bold", 15)
+            c.drawString(x0, y, b)
+
+            # 나머지 Regular (첫 글자 폭만큼 오른쪽으로)
+            b_w = pdfmetrics.stringWidth(b, "NanumGothic-Bold", 15)
+            c.setFont("NanumGothic", 15)
+            c.drawString(x0 + b_w, y, rest)
 
         y_line = diff_box_y + diff_box_h - 13*mm
         for code, full, stt in dif_rows:
