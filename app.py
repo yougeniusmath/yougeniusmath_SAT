@@ -458,7 +458,8 @@ def make_zip_from_rects(doc, rects, zoom, zip_base_name, unify_width_right=True)
 # =========================================================
 # 메인 UI 구조
 # =========================================================
-tab1, tab2, tab3 = st.tabs(["📝 오답노트 생성기", "✂️ 문제캡처 ZIP생성기", "📊 개인 성적표"])
+tab1, tab2, tab3, tab4 = st.tabs(["📝 오답노트 생성기", "✂️ 문제캡처 ZIP생성기", "📊 개인 성적표", "📈 개인 성적표(단원/난이도)"])
+
 
 # ---------------------------------------------------------
 # [Tab 1] 오답노트 생성기 (✅ 원본 그대로)
@@ -1346,3 +1347,900 @@ with tab3:
         except Exception as e:
             st.error(f"오류 발생: {e}")
             st.exception(e)
+
+
+# ---------------------------------------------------------
+# [Tab 4] 단원/난이도 성적표 (✅ Tab3 복사 기반 + 하단 막대그래프 + 표에 단원/난이도 컬럼 추가)
+# ---------------------------------------------------------
+with tab4:
+    st.header("📈 개인 성적표(단원/난이도)")
+    st.info("Tab3와 동일 데이터(ETA.xlsx + Mock데이터.xlsx)를 사용하되, Mock데이터.xlsx의 '단원', '난이도' 컬럼을 이용해 표에 표시 + 하단 7개 단원 막대그래프를 추가합니다.")
+
+    eta_file4 = st.file_uploader("ETA 결과 파일 업로드 (ETA.xlsx)", type=["xlsx"], key="t4_eta")
+    mock_file4 = st.file_uploader("Mock 정답+단원+난이도 파일 업로드 (Mock데이터.xlsx)", type=["xlsx"], key="t4_mock")
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        report_title4 = st.text_input("리포트 제목", value="SAT Math Report", key="t4_title")
+    with c2:
+        generated_date4 = st.date_input("Generated 날짜", value=datetime.now().date(), key="t4_gen_date")
+
+    st.caption("부제목은 QuizResults의 '검색 키워드'가 학생별로 자동으로 들어갑니다. (Tab3와 동일)")
+
+    # ===== 동일 상수(Tab3와 분리해서 Tab4 내부에 재정의) =====
+    STUDENT_SHEET = "Student Analysis"
+    QUIZ_SHEET = "QuizResults"
+
+    SA_HEADER_ROW_IDX = 1
+    QZ_HEADER_ROW_IDX = 0
+
+    SA_NAME_COL = "학생 이름"
+    SA_M1_SCORE_COL = "[M1] 점수"
+    SA_M2_SCORE_COL = "[M2] 점수"
+
+    QZ_KEYWORD_COL = "검색 키워드"
+    QZ_MODULE_COL  = "모듈"
+    QZ_NAME_COL    = "학생 이름"
+    QZ_DT_COL      = "응답 날짜"
+    QZ_TIME_COL    = "소요 시간"
+    QZ_SCORE_COL   = "점수"
+    QZ_WRONG_COL   = "틀린 문제 번호"
+
+    FOOTER_LEFT_TEXT = "Kakaotalk: yujinj524\nPhone: 010-6395-8733"
+
+    # 7개 대단원 라벨
+    DOMAIN_NAMES = {
+        1: "1. Linear",
+        2: "2. Percent & Unit Conversion",
+        3: "3. Quadratic",
+        4: "4. Exponential",
+        5: "5. Polynomials, radical and rational functions",
+        6: "6. Geometry",
+        7: "7. Statistics",
+    }
+
+    def _clean(x):
+        if x is None: return ""
+        if isinstance(x, float) and pd.isna(x): return ""
+        return str(x).replace("\r", "").strip()
+
+    def parse_wrong_list(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return set()
+        s = str(val).strip()
+        if s == "" or s.upper() in ["X", "Х", "-"]:
+            return set()
+        s = s.replace("，", ",").replace(";", ",")
+        nums = [t.strip() for t in s.split(",") if t.strip()]
+        out = set()
+        for n in nums:
+            try:
+                out.add(int(float(n)))
+            except:
+                pass
+        return out
+
+    def score_to_slash22(s):
+        s = _clean(s)
+        if s == "":
+            return ""
+        if "/" in s:
+            return s
+        return f"{s} / 22"
+
+    def assert_columns(df, cols, label):
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            st.error(f"⚠️ {label} 컬럼 누락: {missing}")
+            st.write(f"현재 {label} 컬럼:", list(df.columns))
+            st.stop()
+
+    def build_wrong_rate_dict_fixed_ranges(eta_xl, sheet_name):
+        df = pd.read_excel(eta_xl, sheet_name=sheet_name, header=None)
+        colC = df.iloc[:, 2].tolist()
+
+        m1_vals = colC[2:24]
+        m2_vals = colC[25:47]
+
+        def to_dict(vals):
+            out = {}
+            for i, v in enumerate(vals, start=1):
+                try:
+                    out[i] = float(v)
+                except:
+                    out[i] = None
+            return out
+
+        return to_dict(m1_vals), to_dict(m2_vals)
+
+    # ---- Mock데이터: 정답 + (단원/난이도) 읽기 ----
+    # 반환:
+    #  - ans1, ans2: {qnum:int -> answer:str}
+    #  - meta_topic: {(mod:int, qnum:int) -> topic:str}   예: "5.2"
+    #  - meta_diff:  {(mod:int, qnum:int) -> diff:str}    예: "E"/"M"/"H"
+    def read_mock_answers_with_meta(mock_bytes):
+        df = pd.read_excel(mock_bytes)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        cols = set(df.columns)
+
+        # 신형 포맷: 모듈/문항번호/정답 + (단원/난이도)
+        required = {"모듈", "문항번호", "정답"}
+        if required.issubset(cols):
+            # 없으면 공백으로 처리
+            topic_col = "단원" if "단원" in cols else None
+            diff_col  = "난이도" if "난이도" in cols else None
+
+            def norm_mod(v):
+                s = _clean(v).upper().replace(" ", "")
+                if s in ["M1", "MODULE1", "1"]: return 1
+                if s in ["M2", "MODULE2", "2"]: return 2
+                return None
+
+            ans1, ans2 = {}, {}
+            meta_topic, meta_diff = {}, {}
+
+            for _, r in df.iterrows():
+                mod = norm_mod(r.get("모듈"))
+                if mod not in (1, 2):
+                    continue
+                try:
+                    q = int(float(str(r.get("문항번호")).strip()))
+                except:
+                    continue
+
+                ans = _clean(r.get("정답", ""))
+                top = _clean(r.get(topic_col, "")) if topic_col else ""
+                dif = _clean(r.get(diff_col, "")) if diff_col else ""
+
+                if dif:
+                    dif = dif.upper().strip()
+                    if dif not in ["E", "M", "H"]:
+                        dif = ""
+
+                if mod == 1:
+                    ans1[q] = ans
+                else:
+                    ans2[q] = ans
+
+                meta_topic[(mod, q)] = top
+                meta_diff[(mod, q)] = dif
+
+            return ans1, ans2, meta_topic, meta_diff
+
+        # 구형 포맷(호환): 정답만 읽고 meta는 비움
+        c0, c1 = df.columns[0], df.columns[1]
+        m2_idxs = df.index[df[c0].astype(str).str.contains("Module2", case=False, na=False)].tolist()
+
+        if not m2_idxs:
+            out = {}
+            for _, r in df.iterrows():
+                try: q = int(str(r[c0]).strip())
+                except: continue
+                out[q] = _clean(r[c1])
+            return out, {}, {}, {}
+
+        m2i = m2_idxs[0]
+        m1_rows = df.iloc[:m2i]
+        m2_rows = df.iloc[m2i+1:]
+
+        def rows_to_ans(rows):
+            dct = {}
+            for _, r in rows.iterrows():
+                try: q = int(str(r[c0]).strip())
+                except: continue
+                dct[q] = _clean(r[c1])
+            return dct
+
+        return rows_to_ans(m1_rows), rows_to_ans(m2_rows), {}, {}
+
+    # ===== ReportLab =====
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    def ensure_fonts_registered():
+        try:
+            pdfmetrics.registerFont(TTFont("NanumGothic", FONT_REGULAR))
+        except:
+            pass
+        try:
+            pdfmetrics.registerFont(TTFont("NanumGothic-Bold", FONT_BOLD))
+        except:
+            pass
+
+    def str_w(text, font_name, font_size):
+        return pdfmetrics.stringWidth(text, font_name, font_size)
+
+    def fit_font_size(text, font_name, max_size, min_size, max_width):
+        s = max_size
+        while s >= min_size:
+            if str_w(text, font_name, s) <= max_width:
+                return s
+            s -= 0.5
+        return min_size
+
+    def fit_font_size_two_lines(lines, font_name, max_size, min_size, max_width):
+        need = max_size
+        for ln in lines:
+            ln = (ln or "").strip()
+            if ln == "":
+                continue
+            need = min(need, fit_font_size(ln, font_name, max_size, min_size, max_width))
+        return need
+
+    def draw_round_rect(c, x, y, w, h, r, fill, stroke, stroke_width=1):
+        c.setLineWidth(stroke_width)
+        c.setStrokeColor(stroke)
+        c.setFillColor(fill)
+        c.roundRect(x, y, w, h, r, fill=1, stroke=1)
+
+    def wr_to_text(v):
+        if v is None:
+            return "-"
+        try:
+            v = float(v)
+            return f"{int(round(v * 100))}%"
+        except:
+            return "-"
+
+    def parse_major_topic(topic_str: str):
+        # "5.2" -> 5
+        s = _clean(topic_str)
+        if not s:
+            return None
+        # 앞 숫자만
+        m = re.match(r"^\s*([1-7])(\D|$)", s)
+        if m:
+            return int(m.group(1))
+        # 혹시 "5.2" 형식
+        try:
+            return int(s.split(".")[0])
+        except:
+            return None
+
+    def calc_domain_and_diff_stats(wrong1: set, wrong2: set, meta_topic: dict, meta_diff: dict):
+        # topic totals by major 1..7
+        dom = {k: {"ok": 0, "tot": 0} for k in range(1, 8)}
+        dif = {k: {"ok": 0, "tot": 0} for k in ["E", "M", "H"]}
+
+        for (mod, q), topic in meta_topic.items():
+            major = parse_major_topic(topic)
+            if major not in dom:
+                continue
+
+            wrong_set = wrong1 if mod == 1 else wrong2
+            correct = (q not in wrong_set)
+
+            dom[major]["tot"] += 1
+            if correct:
+                dom[major]["ok"] += 1
+
+            d = _clean(meta_diff.get((mod, q), "")).upper()
+            if d in dif:
+                dif[d]["tot"] += 1
+                if correct:
+                    dif[d]["ok"] += 1
+
+        return dom, dif
+
+    # -------------------------------------------------------------
+    # Tab4 PDF: 표에 단원/난이도 컬럼 + 하단 Domain bar chart
+    # -------------------------------------------------------------
+    def create_report_pdf_reportlab_tab4(
+        output_path: str,
+        title: str,
+        subtitle: str,
+        gen_date_str: str,
+        student_name: str,
+        m1_meta: dict,
+        m2_meta: dict,
+        ans_m1: dict,
+        ans_m2: dict,
+        wr_m1: dict,
+        wr_m2: dict,
+        wrong_m1: set,
+        wrong_m2: set,
+        meta_topic: dict,
+        meta_diff: dict,
+        result_blank: bool = False,
+        footer_left_text: str = "",
+    ):
+        ensure_fonts_registered()
+        c = canvas.Canvas(output_path, pagesize=A4)
+        W, H = A4
+
+        # colors
+        stroke = colors.Color(203/255, 213/255, 225/255)
+        title_col = colors.Color(15/255, 23/255, 42/255)
+        muted = colors.Color(100/255, 116/255, 139/255)
+        pill_fill = colors.Color(241/255, 245/255, 249/255)
+        row_stripe = colors.Color(248/255, 250/255, 252/255)
+        green = colors.Color(22/255, 101/255, 52/255)
+        red = colors.Color(220/255, 38/255, 38/255)
+        bar_fill = colors.Color(191/255, 219/255, 254/255)   # light blue
+        bar_track = colors.Color(226/255, 232/255, 240/255)  # slate-200
+
+        # layout (Tab4: 한 페이지 수납 위해 전체 사이즈 축소)
+        L = 15 * mm
+        R = 15 * mm
+        TOP = H - 24 * mm
+        usable_w = W - L - R
+
+        # Generated
+        c.setFont("NanumGothic", 9)
+        c.setFillColor(muted)
+        c.drawRightString(W - R, TOP + 14*mm, f"Generated: {gen_date_str}")
+
+        # Title / subtitle (작게)
+        c.setFillColor(title_col)
+        c.setFont("NanumGothic-Bold", 24)
+        c.drawString(L, TOP, title)
+
+        c.setFillColor(muted)
+        c.setFont("NanumGothic", 10.5)
+        c.drawString(L, TOP - 9.0*mm, subtitle)
+
+        # Name pill (조금 축소)
+        pill_w = 76 * mm
+        pill_h = 18 * mm
+        pill_x = L + usable_w - pill_w
+        pill_y = TOP - 10.5 * mm
+        draw_round_rect(c, pill_x, pill_y, pill_w, pill_h, 9*mm, pill_fill, stroke, 1)
+
+        c.setFillColor(muted)
+        c.setFont("NanumGothic-Bold", 9)
+        c.drawString(pill_x + 7*mm, pill_y + 11.2*mm, "Name")
+
+        c.setFillColor(title_col)
+        max_name_w = pill_w - 24 * mm
+        name_fs = fit_font_size(student_name, "NanumGothic-Bold", 14, 9, max_name_w)
+        c.setFont("NanumGothic-Bold", name_fs)
+        c.drawRightString(pill_x + pill_w - 7*mm, pill_y + 5.4*mm, student_name)
+
+        # divider
+        line_y = TOP - 18 * mm
+        c.setLineWidth(2)
+        c.setStrokeColor(title_col)
+        c.line(L, line_y, W - R, line_y)
+
+        # KPI (작게)
+        kpi_h = 22 * mm
+        gap = 10 * mm
+        kpi_w = (usable_w - gap) / 2
+        kpi_gap_from_line = 6 * mm
+        kpi_y = line_y - kpi_gap_from_line - kpi_h
+
+        def draw_kpi_card(x, y, w, h, label, score, dt, t):
+            draw_round_rect(c, x, y, w, h, 8*mm, colors.white, stroke, 1)
+
+            c.setFillColor(title_col)
+            c.setFont("NanumGothic-Bold", 12.5)
+            c.drawString(x + 8*mm, y + h - 9.2*mm, label)
+
+            c.setFont("NanumGothic-Bold", 22)
+            c.drawRightString(x + w - 8*mm, y + h - 13.5*mm, str(score))
+
+            c.setFillColor(muted)
+            c.setFont("NanumGothic", 7.5)
+            c.drawString(x + 8*mm, y + 4.0*mm, f"{dt}")
+            c.drawRightString(x + w - 8*mm, y + 4.0*mm, f"{t}")
+
+        draw_kpi_card(L, kpi_y, kpi_w, kpi_h, "Module 1", m1_meta["score"], m1_meta["dt"], m1_meta["time"])
+        draw_kpi_card(L + kpi_w + gap, kpi_y, kpi_w, kpi_h, "Module 2", m2_meta["score"], m2_meta["dt"], m2_meta["time"])
+
+        # Table cards (row height 더 줄여 하단 차트 공간 확보)
+        header_h = 5.2 * mm
+        row_h = 4.6 * mm
+        top_padding = 4.0 * mm
+        bottom_padding = 5.0 * mm
+        card_h = top_padding + header_h + (22 * row_h) + bottom_padding
+        card_y = kpi_y - 3.0 * mm - card_h
+        card_w = kpi_w
+        left_x = L
+        right_x = L + card_w + gap
+
+        def draw_table(x, y, w, h, mod_num, ans_dict, wr_dict, wrong_set):
+            draw_round_rect(c, x, y, w, h, 10*mm, colors.white, stroke, 1)
+
+            strip_y = y + h - top_padding - header_h
+            strip_h = header_h
+
+            c.setLineWidth(1)
+            c.setStrokeColor(stroke)
+            c.setFillColor(pill_fill)
+            c.rect(x + 6*mm, strip_y, w - 12*mm, strip_h, stroke=1, fill=1)
+
+            inner_x = x + 8 * mm
+            inner_w = w - 16 * mm
+
+            # 컬럼 구성: No | 단원 | 난이도 | Answer | 정답률 | Result
+            col_no    = 9 * mm
+            col_topic = 16 * mm
+            col_diff  = 7 * mm
+            col_ans   = 17 * mm
+            col_wr    = 12 * mm
+            col_res   = inner_w - (col_no + col_topic + col_diff + col_ans + col_wr)
+
+            centers = {}
+            centers["no"]    = inner_x + col_no/2
+            centers["topic"] = inner_x + col_no + col_topic/2
+            centers["diff"]  = inner_x + col_no + col_topic + col_diff/2
+            centers["ans"]   = inner_x + col_no + col_topic + col_diff + col_ans/2
+            centers["wr"]    = inner_x + col_no + col_topic + col_diff + col_ans + col_wr/2
+            centers["res"]   = inner_x + col_no + col_topic + col_diff + col_ans + col_wr + col_res/2
+
+            header_text_y = strip_y + 1.55 * mm
+            c.setFillColor(muted)
+            c.setFont("NanumGothic-Bold", 8.6)
+            c.drawCentredString(centers["no"], header_text_y, "No.")
+            c.drawCentredString(centers["topic"], header_text_y, "단원")
+            c.drawCentredString(centers["diff"], header_text_y, "난이도")
+            c.drawCentredString(centers["ans"], header_text_y, "Answer")
+            c.drawCentredString(centers["wr"], header_text_y, "정답률")
+            c.drawCentredString(centers["res"], header_text_y, "Result")
+
+            start_y = strip_y - 0.4*mm - row_h
+            base = 1.15 * mm
+
+            for i, q in enumerate(range(1, 23)):
+                ry = start_y - i * row_h
+
+                if q % 2 == 0:
+                    c.setFillColor(row_stripe)
+                    c.setStrokeColor(row_stripe)
+                    c.rect(x + 6*mm, ry, w - 12*mm, row_h, stroke=0, fill=1)
+
+                ans_raw = _clean(ans_dict.get(q, ""))
+                lines = ans_raw.split("\n") if "\n" in ans_raw else [ans_raw]
+                lines = [ln.strip() for ln in lines if ln.strip()]
+                if not lines:
+                    lines = [""]
+
+                if len(lines) > 2:
+                    lines = [lines[0], " ".join(lines[1:])]
+
+                rate_val = wr_dict.get(q, None)
+                wr_txt = wr_to_text(rate_val)
+
+                if result_blank:
+                    res_txt = ""
+                else:
+                    res_txt = "X" if q in wrong_set else "O"
+
+                topic_txt = _clean(meta_topic.get((mod_num, q), ""))
+                diff_txt  = _clean(meta_diff.get((mod_num, q), "")).upper()
+
+                # No
+                c.setFillColor(title_col)
+                c.setFont("NanumGothic", 9.0)
+                c.drawCentredString(centers["no"], ry + base, str(q))
+
+                # 단원
+                c.setFont("NanumGothic", 8.6)
+                c.drawCentredString(centers["topic"], ry + base, topic_txt)
+
+                # 난이도
+                c.setFont("NanumGothic-Bold", 8.8)
+                c.drawCentredString(centers["diff"], ry + base, diff_txt)
+
+                # Answer
+                ans_max_w = col_ans - 2.5*mm
+                fs = fit_font_size_two_lines(lines, "NanumGothic-Bold", 9.2, 6.5, ans_max_w)
+                c.setFont("NanumGothic-Bold", fs)
+                if len(lines) == 1:
+                    c.drawCentredString(centers["ans"], ry + base, lines[0])
+                else:
+                    c.drawCentredString(centers["ans"], ry + base + 0.55*mm, lines[0])
+                    c.drawCentredString(centers["ans"], ry + base - 0.55*mm, lines[1])
+
+                # 정답률
+                is_low = False
+                try:
+                    if rate_val is not None and float(rate_val) < 0.5:
+                        is_low = True
+                except:
+                    pass
+
+                c.setFillColor(title_col)
+                c.setFont("NanumGothic-Bold" if is_low else "NanumGothic", 8.9 if is_low else 8.7)
+                c.drawCentredString(centers["wr"], ry + base, wr_txt)
+
+                # Result
+                if res_txt:
+                    ox_color = red if res_txt == "X" else green
+                    c.setFillColor(ox_color)
+                    c.setFont("NanumGothic-Bold", 9.6)
+                    c.drawCentredString(centers["res"], ry + base, res_txt)
+
+        draw_table(left_x,  card_y, card_w, card_h, 1, ans_m1, wr_m1, wrong_m1)
+        draw_table(right_x, card_y, card_w, card_h, 2, ans_m2, wr_m2, wrong_m2)
+
+        # ---- 하단 Domain Breakdown 카드 ----
+        dom_stats, dif_stats = calc_domain_and_diff_stats(wrong_m1, wrong_m2, meta_topic, meta_diff)
+
+        domain_h = 55 * mm
+        domain_gap = 4 * mm
+        domain_y = card_y - domain_gap - domain_h
+        domain_x = L
+        domain_w = usable_w
+
+        # 안전: footer 영역 침범하면 높이 줄임(혹시 mock meta가 없어서도 레이아웃 안정)
+        min_bottom = 22 * mm
+        if domain_y < min_bottom:
+            # 가능한 만큼만 줄임
+            shrink = (min_bottom - domain_y)
+            domain_h = max(40*mm, domain_h - shrink)
+            domain_y = min_bottom
+
+        draw_round_rect(c, domain_x, domain_y, domain_w, domain_h, 10*mm, colors.white, stroke, 1)
+
+        # 제목
+        c.setFillColor(title_col)
+        c.setFont("NanumGothic-Bold", 12)
+        c.drawString(domain_x + 8*mm, domain_y + domain_h - 10*mm, "Domain Breakdown")
+
+        c.setFillColor(muted)
+        c.setFont("NanumGothic", 9)
+        c.drawString(domain_x + 8*mm, domain_y + domain_h - 16*mm, "Topic Accuracy (group by first digit 1–7)")
+
+        # 내부 영역
+        inner_x = domain_x + 8*mm
+        inner_y_top = domain_y + domain_h - 20*mm
+        inner_w = domain_w - 16*mm
+
+        # 우측 difficulty 박스
+        diff_box_w = 48 * mm
+        diff_box_h = 26 * mm
+        diff_box_x = inner_x + inner_w - diff_box_w
+        diff_box_y = inner_y_top - diff_box_h + 2*mm
+        draw_round_rect(c, diff_box_x, diff_box_y, diff_box_w, diff_box_h, 6*mm, colors.white, stroke, 1)
+
+        c.setFillColor(title_col)
+        c.setFont("NanumGothic-Bold", 9.5)
+        c.drawString(diff_box_x + 6*mm, diff_box_y + diff_box_h - 7*mm, "Difficulty")
+        c.setFillColor(muted)
+        c.setFont("NanumGothic", 9.5)
+        c.drawRightString(diff_box_x + diff_box_w - 6*mm, diff_box_y + diff_box_h - 7*mm, "Accuracy")
+
+        def pct_str(ok, tot):
+            if tot <= 0:
+                return "-"
+            return f"{int(round((ok/tot)*100))}% ({ok}/{tot})"
+
+        # E/M/H rows
+        dif_rows = [("E", dif_stats["E"]), ("M", dif_stats["M"]), ("H", dif_stats["H"])]
+        y_line = diff_box_y + diff_box_h - 13*mm
+        for lab, stt in dif_rows:
+            c.setFillColor(title_col)
+            c.setFont("NanumGothic-Bold", 11 if lab == "H" else 10.5)
+            c.drawString(diff_box_x + 6*mm, y_line, lab)
+            c.setFont("NanumGothic", 9.5)
+            c.drawRightString(diff_box_x + diff_box_w - 6*mm, y_line, pct_str(stt["ok"], stt["tot"]))
+            y_line -= 6.2*mm
+
+        # 7개 막대그래프(좌측)
+        chart_w = inner_w - diff_box_w - 6*mm
+        chart_x = inner_x
+        chart_y_top = inner_y_top - 3*mm
+
+        row_gap = 6.4 * mm
+        bar_h = 4.2 * mm
+        label_w = 62 * mm
+        value_w = 20 * mm
+        bar_max_w = max(10*mm, chart_w - label_w - value_w - 4*mm)
+
+        for idx, major in enumerate(range(1, 8)):
+            y = chart_y_top - idx * row_gap
+
+            label = DOMAIN_NAMES.get(major, str(major))
+            stt = dom_stats[major]
+            ok, tot = stt["ok"], stt["tot"]
+            pct = (ok / tot) if tot > 0 else None
+
+            # 긴 라벨(5번) 줄바꿈 처리
+            c.setFillColor(title_col)
+            if major == 5:
+                c.setFont("NanumGothic", 8.3)
+                c.drawString(chart_x, y + 1.2*mm, "5. Polynomials, radical")
+                c.drawString(chart_x, y - 2.2*mm, "   and rational functions")
+            else:
+                c.setFont("NanumGothic", 8.6)
+                c.drawString(chart_x, y, label)
+
+            # track
+            track_x = chart_x + label_w
+            track_y = y - 1.8*mm
+            c.setFillColor(bar_track)
+            c.setStrokeColor(bar_track)
+            c.rect(track_x, track_y, bar_max_w, bar_h, stroke=0, fill=1)
+
+            # fill
+            if pct is not None:
+                fill_w = bar_max_w * pct
+            else:
+                fill_w = 0
+
+            c.setFillColor(bar_fill)
+            c.setStrokeColor(bar_fill)
+            c.rect(track_x, track_y, fill_w, bar_h, stroke=0, fill=1)
+
+            # value text
+            val_txt = "-" if pct is None else f"{int(round(pct*100))}%"
+            c.setFillColor(muted)
+            c.setFont("NanumGothic", 8.6)
+            c.drawRightString(chart_x + label_w + bar_max_w + value_w, y, val_txt)
+
+            # (ok/tot) small
+            c.setFont("NanumGothic", 8.0)
+            c.drawRightString(chart_x + label_w + bar_max_w + value_w, y - 3.0*mm, f"{ok}/{tot}" if tot > 0 else "")
+
+        # footer
+        if footer_left_text:
+            c.setFillColor(title_col)
+            c.setFont("NanumGothic", 8)
+            lines = str(footer_left_text).splitlines()
+            y0 = 12 * mm
+            line_gap = 4.2 * mm
+            for idx, ln in enumerate(lines):
+                c.drawString(L, y0 + (len(lines)-1-idx)*line_gap, ln)
+
+        c.showPage()
+        c.save()
+        return output_path
+
+    def render_pdf_first_page_to_png_bytes(pdf_path: str, zoom: float = 2.0) -> bytes:
+        doc = fitz.open(pdf_path)
+        page = doc[0]
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        return pix.tobytes("png")
+
+    if st.button("🚀 단원/난이도 성적표 생성", type="primary", key="t4_btn"):
+        if not eta_file4 or not mock_file4:
+            st.warning("⚠️ ETA.xlsx와 Mock데이터.xlsx를 모두 업로드해주세요.")
+            st.stop()
+
+        if not font_ready:
+            st.error("⚠️ 한글 PDF 생성을 위해 fonts 폴더에 NanumGothic.ttf / NanumGothicBold.ttf가 필요합니다.")
+            st.stop()
+
+        try:
+            eta_xl = pd.ExcelFile(eta_file4)
+
+            # ---- Student Analysis ----
+            if STUDENT_SHEET not in eta_xl.sheet_names:
+                st.error(f"⚠️ ETA.xlsx에 '{STUDENT_SHEET}' 시트가 없습니다.")
+                st.stop()
+
+            raw_sa = pd.read_excel(eta_xl, sheet_name=STUDENT_SHEET, header=None)
+            if raw_sa.shape[0] <= SA_HEADER_ROW_IDX:
+                st.error("⚠️ Student Analysis에서 2행(헤더)을 찾을 수 없습니다.")
+                st.stop()
+
+            sa_header = raw_sa.iloc[SA_HEADER_ROW_IDX].astype(str).tolist()
+            student_df = raw_sa.iloc[SA_HEADER_ROW_IDX + 1:].copy()
+            student_df.columns = sa_header
+            student_df = student_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
+
+            assert_columns(student_df, [SA_NAME_COL, SA_M1_SCORE_COL, SA_M2_SCORE_COL], STUDENT_SHEET)
+
+            students = [_clean(x) for x in student_df[SA_NAME_COL].dropna().tolist()]
+            students = [s for s in students if s != ""]
+            if not students:
+                st.error("학생 목록이 비어있습니다.")
+                st.stop()
+
+            # ---- QuizResults ----
+            if QUIZ_SHEET not in eta_xl.sheet_names:
+                st.error(f"⚠️ ETA.xlsx에 '{QUIZ_SHEET}' 시트가 없습니다.")
+                st.stop()
+
+            quiz_df = pd.read_excel(eta_xl, sheet_name=QUIZ_SHEET, header=QZ_HEADER_ROW_IDX)
+            quiz_df.columns = [str(c).strip() for c in quiz_df.columns]
+            quiz_df = quiz_df.dropna(axis=1, how="all").dropna(axis=0, how="all")
+
+            assert_columns(
+                quiz_df,
+                [QZ_KEYWORD_COL, QZ_MODULE_COL, QZ_NAME_COL, QZ_DT_COL, QZ_TIME_COL, QZ_SCORE_COL, QZ_WRONG_COL],
+                QUIZ_SHEET
+            )
+
+            quiz_map = {}
+            for _, r in quiz_df.iterrows():
+                nm = _clean(r.get(QZ_NAME_COL, ""))
+                md = _clean(r.get(QZ_MODULE_COL, "")).upper()
+                if nm == "":
+                    continue
+
+                if md in ["M1", "MODULE1", "1"]:
+                    mod = 1
+                elif md in ["M2", "MODULE2", "2"]:
+                    mod = 2
+                else:
+                    continue
+
+                quiz_map.setdefault(nm, {})[mod] = {
+                    "dt": _clean(r.get(QZ_DT_COL, "")) or "-",
+                    "time": _clean(r.get(QZ_TIME_COL, "")) or "-",
+                    "score": score_to_slash22(r.get(QZ_SCORE_COL, "")),
+                    "wrong_set": parse_wrong_list(r.get(QZ_WRONG_COL, "")),
+                    "keyword": _clean(r.get(QZ_KEYWORD_COL, "")) or "",
+                }
+
+            # ---- Accuracy / Error Analysis (정답률) ----
+            target_sheet = None
+            if "Accuracy Analysis" in eta_xl.sheet_names:
+                target_sheet = "Accuracy Analysis"
+            elif "Error Analysis" in eta_xl.sheet_names:
+                target_sheet = "Error Analysis"
+
+            if target_sheet:
+                wr1, wr2 = build_wrong_rate_dict_fixed_ranges(eta_xl, target_sheet)
+            else:
+                wr1, wr2 = {}, {}
+
+            # ---- Mock Answers + Meta ----
+            ans1, ans2, meta_topic, meta_diff = read_mock_answers_with_meta(mock_file4)
+
+            if not meta_topic:
+                st.warning("⚠️ Mock데이터.xlsx에서 '단원' 정보를 찾지 못했습니다. (표/그래프에 빈칸으로 나올 수 있어요)")
+            if not meta_diff:
+                st.warning("⚠️ Mock데이터.xlsx에서 '난이도' 정보를 찾지 못했습니다. (표에 빈칸으로 나올 수 있어요)")
+
+            # ---- PDF 생성 ----
+            output_dir = "generated_reports_tab4"
+            os.makedirs(output_dir, exist_ok=True)
+
+            made_files = []
+            made_images = []
+            skipped = []
+            prog = st.progress(0)
+
+            common_subtitle = "-"
+
+            for i, stu in enumerate(students):
+                q = quiz_map.get(stu, {})
+                m1 = q.get(1, {})
+                m2 = q.get(2, {})
+
+                m1_score_txt = _clean(m1.get("score", ""))
+                m2_score_txt = _clean(m2.get("score", ""))
+
+                if m1_score_txt == "" or m2_score_txt == "":
+                    skipped.append(stu)
+                    prog.progress((i+1)/len(students))
+                    continue
+
+                subtitle_kw = _clean(m1.get("keyword", "")) or _clean(m2.get("keyword", "")) or "-"
+                if subtitle_kw != "-" and common_subtitle == "-":
+                    common_subtitle = subtitle_kw
+
+                m1_meta = {"score": m1_score_txt, "dt": m1.get("dt", "-"), "time": m1.get("time", "-")}
+                m2_meta = {"score": m2_score_txt, "dt": m2.get("dt", "-"), "time": m2.get("time", "-")}
+
+                wrong1 = set(m1.get("wrong_set", set()))
+                wrong2 = set(m2.get("wrong_set", set()))
+
+                pdf_path = os.path.join(output_dir, f"{stu}_{generated_date4.strftime('%Y%m%d')}.pdf")
+
+                create_report_pdf_reportlab_tab4(
+                    output_path=pdf_path,
+                    title=report_title4,
+                    subtitle=subtitle_kw,
+                    gen_date_str=generated_date4.strftime("%Y-%m-%d"),
+                    student_name=stu,
+                    m1_meta=m1_meta,
+                    m2_meta=m2_meta,
+                    ans_m1=ans1,
+                    ans_m2=ans2,
+                    wr_m1=wr1,
+                    wr_m2=wr2,
+                    wrong_m1=wrong1,
+                    wrong_m2=wrong2,
+                    meta_topic=meta_topic,
+                    meta_diff=meta_diff,
+                    result_blank=False,
+                    footer_left_text=FOOTER_LEFT_TEXT,
+                )
+
+                made_files.append((stu, pdf_path))
+
+                # PNG
+                try:
+                    png_bytes = render_pdf_first_page_to_png_bytes(pdf_path, zoom=2.0)
+                    png_path = os.path.join(output_dir, f"{stu}_{generated_date4.strftime('%Y%m%d')}.png")
+                    with open(png_path, "wb") as f:
+                        f.write(png_bytes)
+                    made_images.append((stu, png_path))
+                except:
+                    pass
+
+                prog.progress((i+1)/len(students))
+
+            # ---- 템플릿 1개 추가 ----
+            template_pdf = os.path.join(output_dir, f"Report_{generated_date4.strftime('%Y%m%d')}.pdf")
+            create_report_pdf_reportlab_tab4(
+                output_path=template_pdf,
+                title=report_title4,
+                subtitle=common_subtitle,
+                gen_date_str=generated_date4.strftime("%Y-%m-%d"),
+                student_name="-",
+                m1_meta={"score": "-", "dt": "-", "time": "-"},
+                m2_meta={"score": "-", "dt": "-", "time": "-"},
+                ans_m1=ans1,
+                ans_m2=ans2,
+                wr_m1=wr1,
+                wr_m2=wr2,
+                wrong_m1=set(),
+                wrong_m2=set(),
+                meta_topic=meta_topic,
+                meta_diff=meta_diff,
+                result_blank=True,
+                footer_left_text=FOOTER_LEFT_TEXT,
+            )
+            made_files.append(("Report", template_pdf))
+
+            try:
+                png_bytes = render_pdf_first_page_to_png_bytes(template_pdf, zoom=2.0)
+                template_png = os.path.join(output_dir, f"Report_{generated_date4.strftime('%Y%m%d')}.png")
+                with open(template_png, "wb") as f:
+                    f.write(png_bytes)
+                made_images.append(("Report", template_png))
+            except:
+                pass
+
+            if not made_files:
+                st.warning("생성된 PDF가 없습니다. (QuizResults 점수 blank로 모두 제외되었을 수 있어요)")
+                if skipped:
+                    with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
+                        for s in skipped:
+                            st.write(f"- {s}")
+                st.stop()
+
+            # ---- ZIPs ----
+            pdf_zip_buf = io.BytesIO()
+            with zipfile.ZipFile(pdf_zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for _, path in made_files:
+                    if os.path.exists(path):
+                        z.write(path, arcname=os.path.basename(path))
+            pdf_zip_buf.seek(0)
+
+            img_zip_buf = io.BytesIO()
+            with zipfile.ZipFile(img_zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for _, path in made_images:
+                    if os.path.exists(path):
+                        z.write(path, arcname=os.path.basename(path))
+            img_zip_buf.seek(0)
+
+            st.success(f"✅ 생성 완료(Tab4): PDF {len(made_files)}개 / 이미지 {len(made_images)}개 (제외: {len(skipped)}명)")
+            if skipped:
+                with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
+                    for s in skipped:
+                        st.write(f"- {s}")
+
+            st.download_button(
+                "📦 단원/난이도 성적표 PDF ZIP 다운로드",
+                data=pdf_zip_buf,
+                file_name=f"단원난이도_PDF_{generated_date4.strftime('%Y%m%d')}.zip",
+                mime="application/zip",
+                key="t4_download_pdf_zip"
+            )
+
+            st.download_button(
+                "🖼️ 단원/난이도 성적표 이미지(PNG) ZIP 다운로드",
+                data=img_zip_buf,
+                file_name=f"단원난이도_PNG_{generated_date4.strftime('%Y%m%d')}.zip",
+                mime="application/zip",
+                key="t4_download_png_zip"
+            )
+
+        except ModuleNotFoundError as e:
+            st.error("❌ reportlab이 설치되어 있지 않습니다. (requirements.txt에 reportlab 추가 필요)")
+            st.exception(e)
+        except Exception as e:
+            st.error(f"오류 발생: {e}")
+            st.exception(e)
+
