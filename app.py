@@ -1961,38 +1961,164 @@ with tab4:
         draw_table(left_x, card_y, card_w, card_h, ans_m1, wr_m1, wrong_m1, topic_m1, diff_m1)
         draw_table(right_x, card_y, card_w, card_h, ans_m2, wr_m2, wrong_m2, topic_m2, diff_m2)
 
-        # ---- 하단 Topic 그래프 카드 ----
-        # 페이지 하단 여유 고려
-        graph_h = 56*mm
-        graph_y = 20*mm  # footer 위로 조금 띄움
-        graph_x = L
-        graph_w = usable_w
+        # ---- 하단 Domain Breakdown 카드 (TOPIC_NAMES 사용) ----
+        # meta dict (q -> "1.1" 같은 문자열 / q -> "E/M/H")
+        meta_topic = {1: topic_m1, 2: topic_m2}
+        meta_diff  = {1: diff_m1,  2: diff_m2}
 
-        # items build (M1+M2 합친 44문항)
-        items = []
-        for q in range(1, 23):
-            items.append({
-                "topic": topic_m1.get(q, ""),
-                "diff": diff_m1.get(q, ""),
-                "is_correct": (q not in wrong_m1),
-            })
-        for q in range(1, 23):
-            items.append({
-                "topic": topic_m2.get(q, ""),
-                "diff": diff_m2.get(q, ""),
-                "is_correct": (q not in wrong_m2),
-            })
+        # 통계 계산
+        dom_stats = {k: {"ok": 0, "tot": 0} for k in range(1, 8)}
+        dif_stats = {k: {"ok": 0, "tot": 0} for k in ["E", "M", "H"]}
 
-        topic_rows = build_topic_rows(items)
-        diff_summary = build_difficulty_summary(items)
+        def _major_from_topic(topic_str: str):
+            s = str(topic_str or "").strip()
+            m = re.match(r"^\s*(\d+)", s)
+            if not m:
+                return None
+            v = int(m.group(1))
+            return v if 1 <= v <= 7 else None
 
-        draw_topic_panel_domain_style4(
-            c,
-            graph_x, graph_y, graph_w, graph_h,
-            topic_rows=topic_rows,
-            diff_summary=diff_summary,
-            title="Topic",
-        )
+        for mod in (1, 2):
+            wrong_set = wrong_m1 if mod == 1 else wrong_m2
+            for q in range(1, 23):
+                is_ok = (q not in wrong_set)
+
+                # Domain(Topic)
+                t = (meta_topic.get(mod, {}) or {}).get(q, "")
+                major = _major_from_topic(t)
+                if major is not None:
+                    dom_stats[major]["tot"] += 1
+                    if is_ok:
+                        dom_stats[major]["ok"] += 1
+
+                # Difficulty
+                d = (meta_diff.get(mod, {}) or {}).get(q, "")
+                d = str(d or "").strip().upper()
+                if d in dif_stats:
+                    dif_stats[d]["tot"] += 1
+                    if is_ok:
+                        dif_stats[d]["ok"] += 1
+
+        # 카드 위치/크기
+        domain_h = 55 * mm
+        domain_gap = 4 * mm
+        domain_y = card_y - domain_gap - domain_h
+        domain_x = L
+        domain_w = usable_w
+
+        # footer 침범 방지
+        min_bottom = 22 * mm
+        if domain_y < min_bottom:
+            shrink = (min_bottom - domain_y)
+            domain_h = max(40 * mm, domain_h - shrink)
+            domain_y = min_bottom
+
+        # 막대 색상 (오른쪽 회색 = track, 왼쪽 파랑 = fill)
+        bar_track = colors.Color(226/255, 232/255, 240/255)  # 연회색
+        bar_fill  = colors.Color(191/255, 219/255, 254/255)  # 연파랑
+
+        draw_round_rect4(c, domain_x, domain_y, domain_w, domain_h, 10*mm, colors.white, stroke, 1)
+
+        # 제목
+        c.setFillColor(title_col)
+        c.setFont("NanumGothic-Bold", 12)
+        c.drawString(domain_x + 8*mm, domain_y + domain_h - 10*mm, "Domain Breakdown")
+
+        c.setFillColor(muted)
+        c.setFont("NanumGothic", 9)
+        c.drawString(domain_x + 8*mm, domain_y + domain_h - 16*mm, "Topic Accuracy (group by first digit 1–7)")
+
+        # 내부 영역
+        inner_x = domain_x + 8*mm
+        inner_y_top = domain_y + domain_h - 20*mm
+        inner_w = domain_w - 16*mm
+
+        # 우측 difficulty 박스
+        diff_box_w = 48 * mm
+        diff_box_h = 26 * mm
+        diff_box_x = inner_x + inner_w - diff_box_w
+        diff_box_y = inner_y_top - diff_box_h + 2*mm
+        draw_round_rect4(c, diff_box_x, diff_box_y, diff_box_w, diff_box_h, 6*mm, colors.white, stroke, 1)
+
+        c.setFillColor(title_col)
+        c.setFont("NanumGothic-Bold", 9.5)
+        c.drawString(diff_box_x + 6*mm, diff_box_y + diff_box_h - 7*mm, "Difficulty")
+        c.setFillColor(muted)
+        c.setFont("NanumGothic", 9.5)
+        c.drawRightString(diff_box_x + diff_box_w - 6*mm, diff_box_y + diff_box_h - 7*mm, "Accuracy")
+
+        def pct_str(ok, tot):
+            if tot <= 0:
+                return "-"
+            return f"{int(round((ok/tot)*100))}% ({ok}/{tot})"
+
+        # E/M/H rows
+        dif_rows = [("E", dif_stats["E"]), ("M", dif_stats["M"]), ("H", dif_stats["H"])]
+        y_line = diff_box_y + diff_box_h - 13*mm
+        for lab, stt in dif_rows:
+            c.setFillColor(title_col)
+            c.setFont("NanumGothic-Bold", 11 if lab == "H" else 10.5)
+            c.drawString(diff_box_x + 6*mm, y_line, lab)
+            c.setFont("NanumGothic", 9.5)
+            c.drawRightString(diff_box_x + diff_box_w - 6*mm, y_line, pct_str(stt["ok"], stt["tot"]))
+            y_line -= 6.2*mm
+
+        # 7개 막대그래프(좌측)
+        chart_w = inner_w - diff_box_w - 6*mm
+        chart_x = inner_x
+        chart_y_top = inner_y_top - 3*mm
+
+        row_gap = 6.4 * mm
+        bar_h = 4.2 * mm
+        label_w = 62 * mm
+        value_w = 20 * mm
+        bar_max_w = max(10*mm, chart_w - label_w - value_w - 4*mm)
+
+        for idx, major in enumerate(range(1, 8)):
+            y = chart_y_top - idx * row_gap
+
+            label = TOPIC_NAMES.get(major, str(major))
+            stt = dom_stats[major]
+            ok, tot = stt["ok"], stt["tot"]
+            pct = (ok / tot) if tot > 0 else None
+
+            # 라벨(5번 줄바꿈)
+            c.setFillColor(title_col)
+            if major == 5:
+                c.setFont("NanumGothic", 8.3)
+                c.drawString(chart_x, y + 1.2*mm, "5. Polynomials, radical")
+                c.drawString(chart_x, y - 2.2*mm, "   and rational functions")
+            else:
+                c.setFont("NanumGothic", 8.6)
+                c.drawString(chart_x, y, label.replace("\n", " "))
+
+            # track
+            track_x = chart_x + label_w
+            track_y = y - 1.8*mm
+            c.setFillColor(bar_track)
+            c.setStrokeColor(bar_track)
+            c.rect(track_x, track_y, bar_max_w, bar_h, stroke=0, fill=1)
+
+            # fill
+            fill_w = (bar_max_w * pct) if pct is not None else 0
+            c.setFillColor(bar_fill)
+            c.setStrokeColor(bar_fill)
+            c.rect(track_x, track_y, fill_w, bar_h, stroke=0, fill=1)
+
+            # 오른쪽 값 텍스트
+            val_txt = "-" if pct is None else f"{int(round(pct*100))}%"
+            c.setFillColor(muted)
+            c.setFont("NanumGothic", 8.6)
+            c.drawRightString(chart_x + label_w + bar_max_w + value_w, y, val_txt)
+
+            # (ok/tot)
+            c.setFont("NanumGothic", 8.0)
+            c.drawRightString(
+                chart_x + label_w + bar_max_w + value_w,
+                y - 3.0*mm,
+                f"{ok}/{tot}" if tot > 0 else ""
+            )
+
 
         # footer
         if footer_left_text:
