@@ -4,10 +4,31 @@ import zipfile
 import os
 import io
 import re
+import logging
+import warnings
 from PIL import Image
 from fpdf import FPDF
 from datetime import datetime
 import fitz  # PyMuPDF
+
+# ==============================
+# [FIX] fontTools subset 로그 폭주 차단 + DeprecationWarning 숨김
+# ==============================
+logging.getLogger("fontTools.subset").setLevel(logging.ERROR)
+logging.getLogger("fontTools.ttLib").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# ==============================
+# [FIX] fpdf2 신/구버전 호환: ln=True 대체용 함수
+# ==============================
+try:
+    from fpdf.enums import XPos, YPos
+
+    def pdf_cell_ln(pdf: FPDF, w, h, text: str, **kwargs):
+        pdf.cell(w, h, text=text, new_x=XPos.LMARGIN, new_y=YPos.NEXT, **kwargs)
+except Exception:
+    def pdf_cell_ln(pdf: FPDF, w, h, text: str, **kwargs):
+        pdf.cell(w, h, txt=text, ln=True, **kwargs)
 
 # ==============================
 # 0. 기본 설정
@@ -28,8 +49,9 @@ if font_ready:
             super().__init__()
             self.set_margins(25.4, 30, 25.4)
             self.set_auto_page_break(auto=True, margin=25.4)
-            self.add_font(pdf_font_name, '', FONT_REGULAR, uni=True)
-            self.add_font(pdf_font_name, 'B', FONT_BOLD, uni=True)
+            # [FIX] uni=True 제거 (fpdf2 deprecation)
+            self.add_font(pdf_font_name, style="", fname=FONT_REGULAR)
+            self.add_font(pdf_font_name, style="B", fname=FONT_BOLD)
             self.set_font(pdf_font_name, size=10)
 else:
     st.error("⚠️ 한글 PDF 생성을 위해 fonts 폴더에 NanumGothic.ttf 와 NanumGothicBold.ttf 모두 필요합니다.")
@@ -117,7 +139,8 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     pdf = KoreanPDF()
     pdf.add_page()
     pdf.set_font(pdf_font_name, style='B', size=10)
-    pdf.cell(0, 8, txt=f"<{name}_{doc_title}>", ln=True)
+    # [FIX] txt/ln deprecated 대응
+    pdf_cell_ln(pdf, 0, 8, f"<{name}_{doc_title}>")
 
     def add_images(title, images):
         est_height = 80
@@ -125,7 +148,8 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
             pdf.add_page()
 
         pdf.set_font(pdf_font_name, size=10)
-        pdf.cell(0, 8, txt=title, ln=True)
+        # [FIX] txt/ln deprecated 대응
+        pdf_cell_ln(pdf, 0, 8, title)
 
         if images:
             for img in images:
