@@ -2063,12 +2063,12 @@ with tab4:
         # ✅ 오른쪽 정렬 기준선 2개 (퍼센트 / 분수)
         #    (ok/tot)는 맨 오른쪽, %는 그 왼쪽에 "고정 폭"으로 정렬
         x_frac_r = x_right
-        x_pct_r  = x_right - 18 * mm   # 간격: 16~22mm 사이로 취향 조절
+        x_pct_r  = x_right - 11 * mm   # 간격: 16~22mm 사이로 취향 조절
 
         # ✅ 세로 중앙 정렬 (3줄이 박스 중앙에 오도록)
         row_step = 8.0 * mm            # 줄 겹치면 8.4~8.8로
         y_mid = diff_box_y + diff_box_h / 2
-        y0 = y_mid + row_step          # 첫 줄 baseline (Easy)
+        y0 = y_mid + row_step -1.2mm          # 첫 줄 baseline (Easy)
 
         for i, (b, rest, stt) in enumerate(rows):
             y = y0 - i * row_step
@@ -2080,7 +2080,7 @@ with tab4:
             c.drawString(x_left, y, b)
 
             b_w = pdfmetrics.stringWidth(b, "NanumGothic-Bold", 10)
-            c.setFont("NanumGothic", 12)
+            c.setFont("NanumGothic", 9.5)
             c.drawString(x_left + b_w, y, rest)
 
             # 오른쪽: % / (ok/tot) 정렬 (둘 다 right align)
