@@ -670,9 +670,9 @@ with tab2:
     zoom_val = c1.slider("해상도(zoom)", 2.0, 4.0, 3.0, 0.1, key="t2_zoom")
     pt_val = c2.slider("위 여백(번호 포함)", 0, 140, 10, 1, key="t2_pt")
     pb_val = c3.slider("아래 여백(다음 문제 전)", 0, 200, 12, 1, key="t2_pb")
-    frq_val = c4.slider("FRQ 아래 여백(px)", 0, 600, 250, 25, key="t2_frq")
+    frq_val = c4.slider("단답형 아래 여백(px)", 0, 600, 250, 25, key="t2_frq")
 
-    unify_width = st.checkbox("모듈 내 가로폭을 가장 넓은 문제에 맞춤(오른쪽만 확장)", value=True, key="t2_chk")
+
 
     if pdf_file:
         if st.button("✂️ 자르기 & ZIP 생성", type="primary", key="t2_btn"):
@@ -689,16 +689,18 @@ with tab2:
                         pad_bottom=pb_val,
                         frq_extra_space_px=frq_val,
                     )
-
+                    count_m1 = sum(1 for r in rects_data if r['mod'] == 1)
+                    count_m2 = sum(1 for r in rects_data if r['mod'] == 2)
+                    
                     zbuf_data, zname = make_zip_from_rects(
                         doc_obj,
                         rects_data,
                         zoom_val,
                         zip_base,
-                        unify_width_right=unify_width,
+                        unify_width_right=True,  # [수정] UI 없이 항상 True로 고정
                     )
 
-                    st.success(f"✅ 처리가 완료되었습니다! (총 {len(rects_data)}문제 추출)")
+                    st.success(f"✅ 처리 완료! (총 {len(rects_data)}문제: M1 {count_m1}개 / M2 {count_m2}개)")
                     st.download_button(
                         "📦 ZIP 다운로드",
                         data=zbuf_data,
