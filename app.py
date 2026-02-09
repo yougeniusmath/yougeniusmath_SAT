@@ -179,6 +179,7 @@ HEADER_FOOTER_HINT_RE = re.compile(
     r"(YOU,\s*GENIUS|700\+\s*MOCK\s*TEST|Kakaotalk|Instagram|010-\d{3,4}-\d{4}|Module\s*\d+|SECTION)",
     re.IGNORECASE,
 )
+PAGE_NUM_ONLY_RE = re.compile(r"^\s*\d{1,3}\s*$")
 NUMDOT_RE = re.compile(r"^(\d{1,2})\.$")
 NUM_RE = re.compile(r"^\d{1,2}$")
 CHOICE_LABELS = ["D)", "C)", "B)", "A)"]
@@ -266,14 +267,38 @@ def last_choice_bottom_y_in_band(page, y_from, y_to):
 
 def find_footer_start_y(page, y_from, y_to):
     ys = []
+    page_h = page.rect.height
+
+    # ✅ 페이지 하단 18% 영역만 footer 후보로 봄 (너무 공격적이면 0.85~0.88로 올려도 됨)
+    bottom_zone_y = page_h * 0.82
+
     for b in page.get_text("blocks"):
-        if len(b) < 5: continue
-        y0 = b[1]
-        text = b[4]
-        if y0 < y_from or y0 > y_to: continue
-        if text and HEADER_FOOTER_HINT_RE.search(str(text)):
+        if len(b) < 5:
+            continue
+
+        x0, y0, x1, y1, text = b[0], b[1], b[2], b[3], b[4]
+
+        if y0 < y_from or y0 > y_to:
+            continue
+        if not text:
+            continue
+
+        t = str(text).strip()
+
+        # (1) 기존 footer 힌트(카톡/전화번호/브랜딩 등)
+        if HEADER_FOOTER_HINT_RE.search(t):
             ys.append(y0)
+            continue
+
+        # (2) ✅ 추가: 페이지 하단 + 오른쪽에 있는 "숫자만" 블록(페이지번호)도 footer로 간주
+        #     - 하단 영역(bottom_zone) AND
+        #     - 오른쪽 영역(페이지 폭의 60% 이후) AND
+        #     - 텍스트가 숫자만
+        if (y0 >= bottom_zone_y) and (x0 >= page.rect.width * 0.60) and PAGE_NUM_ONLY_RE.match(t):
+            ys.append(y0)
+
     return min(ys) if ys else None
+
 
 def content_bottom_y(page, y_from, y_to):
     bottoms = []
