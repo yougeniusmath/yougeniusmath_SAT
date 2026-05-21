@@ -62,72 +62,85 @@ else:
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # 컬럼명 문자열 정리
     df.columns = [str(c).strip() for c in df.columns]
 
     def keyify(s: str) -> str:
         return (
             str(s)
             .replace("\u3000", " ")
+            .replace("\u00A0", " ")
             .lower()
             .replace(" ", "")
             .replace("_", "")
             .replace("-", "")
             .replace("[", "")
             .replace("]", "")
+            .replace("(", "")
+            .replace(")", "")
+            .strip()
         )
 
-    # 실제 사용할 헤더들
     name_alias = {
         "학생 이름",
+        "학생이름",
         "이름",
+        "학생명",
         "name",
-        "학생명"
+        "studentname"
     }
 
     m1_alias = {
+        "[M1] 틀린 문제",
         "[M1] 틀린문제",
+        "M1 틀린 문제",
+        "M1 틀린문제",
+        "m1틀린문제",
         "module1틀린문제",
-        "m1wrong"
+        "m1wrong",
+        "module1wrong"
     }
 
     m2_alias = {
+        "[M2] 틀린 문제",
         "[M2] 틀린문제",
+        "M2 틀린 문제",
+        "M2 틀린문제",
+        "m2틀린문제",
         "module2틀린문제",
-        "m2wrong"
+        "m2wrong",
+        "module2wrong"
     }
 
-    # 컬럼명 → 정규화된 키
-    key_map = {c: keyify(c) for c in df.columns}
+    name_keys = {keyify(x) for x in name_alias}
+    m1_keys = {keyify(x) for x in m1_alias}
+    m2_keys = {keyify(x) for x in m2_alias}
 
     rename_map = {}
 
-    for col, key in key_map.items():
+    for col in df.columns:
+        key = keyify(col)
 
-        # 학생 이름
-        if key in {keyify(x) for x in name_alias}:
-            rename_map[col] = "학생 이름"
+        if key in name_keys:
+            rename_map[col] = "이름"
 
-        # M1 틀린 문제
-        elif key in {keyify(x) for x in m1_alias}:
-            rename_map[col] = "[M1] 틀린문제"
+        elif key in m1_keys:
+            rename_map[col] = "Module1"
 
-        # M2 틀린 문제
-        elif key in {keyify(x) for x in m2_alias}:
-            rename_map[col] = "[M2] 틀린문제"
+        elif key in m2_keys:
+            rename_map[col] = "Module2"
 
     df = df.rename(columns=rename_map)
 
     return df
 
+
 def example_input_df():
     return pd.DataFrame({
         '학생 이름': ['홍길동', '김철수', '이영희', '박지성', '손흥민'],
-        '[M1] 점수': [100, 90, 100, 50, None],
         '[M1] 틀린 문제': ['1,3,5', 'X', 'X', '1', None],
-        '[M2] 점수': [95, 85, 100, None, None],
         '[M2] 틀린 문제': ['X', '1,3', 'X', None, None]
     })
+
 
 def get_example_excel():
     output = io.BytesIO()
@@ -137,46 +150,62 @@ def get_example_excel():
     output.seek(0)
     return output
 
+
 def extract_zip_to_dict(zip_file):
     m1_imgs, m2_imgs = {}, {}
+
     with zipfile.ZipFile(zip_file) as z:
         for file in z.namelist():
             if file.lower().endswith(('png', 'jpg', 'jpeg', 'webp')):
                 parts = file.split('/')
-                if len(parts) < 2: continue
-                folder = parts[0].lower()
-                q_num = os.path.splitext(os.path.basename(file))[0]
+                if len(parts) < 2:
+                    continue
+
+                folder = parts[0].lower().strip()
+                q_num = os.path.splitext(os.path.basename(file))[0].strip()
+
                 with z.open(file) as f:
                     img = Image.open(f).convert("RGB")
-                    if folder == "m1": m1_imgs[q_num] = img
-                    elif folder == "m2": m2_imgs[q_num] = img
+
+                    if folder == "m1":
+                        m1_imgs[q_num] = img
+                    elif folder == "m2":
+                        m2_imgs[q_num] = img
+
     return m1_imgs, m2_imgs
 
+
 def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
-    if not font_ready: return None
+    if not font_ready:
+        return None
+
     pdf = KoreanPDF()
     pdf.add_page()
     pdf.set_font(pdf_font_name, style='B', size=10)
-    # [FIX] txt/ln deprecated 대응
+
     pdf_cell_ln(pdf, 0, 8, f"<{name}_{doc_title}>")
 
     def add_images(title, images):
         est_height = 80
+
         if images and (pdf.get_y() + 10 + est_height > pdf.page_break_trigger):
             pdf.add_page()
 
         pdf.set_font(pdf_font_name, size=10)
-        # [FIX] txt/ln deprecated 대응
         pdf_cell_ln(pdf, 0, 8, title)
 
         if images:
             for img in images:
                 temp_filename = f"temp_{datetime.now().timestamp()}_{os.urandom(4).hex()}.jpg"
                 img.save(temp_filename)
-                # [고정] A4 여백 고려하여 가장 예쁜 사이즈 150mm로 고정
+
                 pdf.image(temp_filename, w=150)
-                try: os.remove(temp_filename)
-                except: pass
+
+                try:
+                    os.remove(temp_filename)
+                except:
+                    pass
+
                 pdf.ln(8)
         else:
             pdf.ln(8)
@@ -187,8 +216,8 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     pdf_path = os.path.join(output_dir, f"{name}_{doc_title}.pdf")
     pdf.output(pdf_path)
-    return pdf_path
 
+    return pdf_path
 # =========================================================
 # [Tab 2] PDF 문제 자르기 관련 상수 및 함수
 # =========================================================
