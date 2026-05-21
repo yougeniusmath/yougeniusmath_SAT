@@ -79,20 +79,20 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # 실제 사용할 헤더들
     name_alias = {
-        "학생이름",
+        "학생 이름",
         "이름",
         "name",
         "학생명"
     }
 
     m1_alias = {
-        "m1틀린문제",
+        "[M1] 틀린문제",
         "module1틀린문제",
         "m1wrong"
     }
 
     m2_alias = {
-        "m2틀린문제",
+        "[M2] 틀린문제",
         "module2틀린문제",
         "m2wrong"
     }
@@ -106,15 +106,15 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
         # 학생 이름
         if key in {keyify(x) for x in name_alias}:
-            rename_map[col] = "이름"
+            rename_map[col] = "학생 이름"
 
         # M1 틀린 문제
         elif key in {keyify(x) for x in m1_alias}:
-            rename_map[col] = "Module1"
+            rename_map[col] = "[M1] 틀린문제"
 
         # M2 틀린 문제
         elif key in {keyify(x) for x in m2_alias}:
-            rename_map[col] = "Module2"
+            rename_map[col] = "[M2] 틀린문제"
 
     df = df.rename(columns=rename_map)
 
