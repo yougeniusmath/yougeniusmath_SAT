@@ -61,45 +61,63 @@ else:
 # =========================================================
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+
+    # 컬럼명 문자열 정리
     df.columns = [str(c).strip() for c in df.columns]
 
     def keyify(s: str) -> str:
         return (
-            s.replace("\u3000", " ")
-             .lower()
-             .replace(" ", "")
-             .replace("_", "")
-             .replace("-", "")
-             .replace("[", "")
-             .replace("]", "")
+            str(s)
+            .replace("\u3000", " ")
+            .lower()
+            .replace(" ", "")
+            .replace("_", "")
+            .replace("-", "")
+            .replace("[", "")
+            .replace("]", "")
         )
 
-    name_alias = {"이름", "name", "학생명", "학생이름", "studentname"}
-    m1_alias = {"module1", "모듈1", "m1", "module01", "m1틀린문제", "module1틀린문제", "m1wrong", "[M1] 점수"}
-    m2_alias = {"module2", "모듈2", "m2", "module02", "m2틀린문제", "module2틀린문제", "m2wrong", "[M2] 점수"}
+    # 실제 사용할 헤더들
+    name_alias = {
+        "학생이름",
+        "이름",
+        "name",
+        "학생명"
+    }
 
+    m1_alias = {
+        "m1틀린문제",
+        "module1틀린문제",
+        "m1wrong"
+    }
+
+    m2_alias = {
+        "m2틀린문제",
+        "module2틀린문제",
+        "m2wrong"
+    }
+
+    # 컬럼명 → 정규화된 키
     key_map = {c: keyify(c) for c in df.columns}
+
     rename_map = {}
-    found = {"이름": None, "Module1": None, "Module2": None}
 
-    if df.columns.size:
-        name_keys = {keyify(x) for x in name_alias}
-        m1_keys = {keyify(x) for x in m1_alias}
-        m2_keys = {keyify(x) for x in m2_alias}
+    for col, key in key_map.items():
 
-        for c, k in key_map.items():
-            if k in name_keys and found["이름"] is None:
-                found["이름"] = c
-            elif k in m1_keys and found["Module1"] is None:
-                found["Module1"] = c
-            elif k in m2_keys and found["Module2"] is None:
-                found["Module2"] = c
+        # 학생 이름
+        if key in {keyify(x) for x in name_alias}:
+            rename_map[col] = "이름"
 
-    if found["이름"]: rename_map[found["이름"]] = "이름"
-    if found["Module1"]: rename_map[found["Module1"]] = "Module1"
-    if found["Module2"]: rename_map[found["Module2"]] = "Module2"
+        # M1 틀린 문제
+        elif key in {keyify(x) for x in m1_alias}:
+            rename_map[col] = "Module1"
+
+        # M2 틀린 문제
+        elif key in {keyify(x) for x in m2_alias}:
+            rename_map[col] = "Module2"
 
     df = df.rename(columns=rename_map)
+
     return df
 
 def example_input_df():
