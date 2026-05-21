@@ -218,6 +218,7 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
     pdf.output(pdf_path)
 
     return pdf_path
+    
 # =========================================================
 # [Tab 2] PDF 문제 자르기 관련 상수 및 함수
 # =========================================================
