@@ -535,7 +535,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["📝 오답노트 생성기", "✂️ 문제�
 
 
 # ---------------------------------------------------------
-# [Tab 1] 오답노트 생성기 (✅ 원본 그대로)
+# [Tab 1] 오답노트 생성기
 # ---------------------------------------------------------
 with tab1:
     st.header("📝 SAT 오답노트 생성기")
@@ -562,18 +562,19 @@ with tab1:
 
     st.markdown("---")
     st.header("📄 문서 제목 입력")
-    doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1, 26 6월대비 문풀반 MATH Mock1)", value="25 S2 SAT MATH 만점반 Mock Test1", key="t1_title")
+    doc_title = st.text_input(
+        "문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1, 26 6월대비 문풀반 MATH Mock1)",
+        value="25 S2 SAT MATH 만점반 Mock Test1",
+        key="t1_title"
+    )
 
     st.header("📦 파일 업로드")
 
-    st.write("")
     st.markdown("#### 문제 이미지 ZIP 파일")
     img_zip = st.file_uploader("m1, m2 폴더가 들어있는 ZIP 파일", type="zip", key="t1_zip")
 
     st.markdown("#### 오답 현황 엑셀 파일")
     excel_file = st.file_uploader("학생들의 결과 데이터가 담긴 엑셀 파일", type="xlsx", key="t1_excel")
-
-    st.write("")
 
     if st.button("🚀 오답노트 생성 시작", type="primary", key="t1_btn"):
         if not img_zip or not excel_file:
@@ -581,12 +582,22 @@ with tab1:
         else:
             try:
                 m1_imgs, m2_imgs = extract_zip_to_dict(img_zip)
+
                 raw = pd.read_excel(excel_file)
                 df = normalize_columns(raw)
 
-                missing = {"이름", "Module1", "Module2"} - set(df.columns)
+                required = {"이름", "Module1", "Module2"}
+                missing = required - set(df.columns)
+
                 if missing:
-                    st.error(f"필수 컬럼 누락: {missing}")
+                    st.error(
+                        f"필수 컬럼 누락: {missing}\n\n"
+                        f"현재 인식된 컬럼: {list(df.columns)}\n\n"
+                        f"엑셀 헤더는 반드시 다음 중 하나로 입력해주세요:\n"
+                        f"- 학생 이름\n"
+                        f"- [M1] 틀린 문제\n"
+                        f"- [M2] 틀린 문제"
+                    )
                     st.stop()
 
                 output_dir = "generated_pdfs"
@@ -596,22 +607,39 @@ with tab1:
                 skipped_details = {"만점": [], "M1/M2 하나 미제출": [], "미제출": []}
                 progress_bar = st.progress(0)
 
+                def parse_module_data(x):
+                    if pd.isna(x):
+                        return None
+
+                    s = str(x).strip()
+
+                    if s == "":
+                        return None
+
+                    if s.upper() in ["X", "Х", "-", "없음", "NONE", "NAN"]:
+                        return []
+
+                    s = (
+                        s.replace("，", ",")
+                         .replace(";", ",")
+                         .replace(" ", "")
+                    )
+
+                    nums = [t.strip() for t in s.split(",") if t.strip()]
+                    return nums if nums else []
+
                 for idx, row in df.iterrows():
-                    name = row['이름']
+                    name = str(row["이름"]).strip()
 
-                    def parse_module_data(x):
-                        if pd.isna(x): return None
-                        s = str(x).strip()
-                        if s == "": return None
-                        if s.upper() in ["X", "Х", "-"]: return []
-                        s = s.replace("，", ",").replace(";", ",")
-                        nums = [t.strip() for t in s.split(",") if t.strip()]
-                        return nums if nums else []
+                    if not name or name.lower() == "nan":
+                        progress_bar.progress((idx + 1) / len(df))
+                        continue
 
-                    m1_data = parse_module_data(row['Module1'])
-                    m2_data = parse_module_data(row['Module2'])
+                    m1_data = parse_module_data(row["Module1"])
+                    m2_data = parse_module_data(row["Module2"])
 
                     skip_reason = None
+
                     if m1_data is None and m2_data is None:
                         skip_reason = "미제출"
                     elif m1_data is None or m2_data is None:
@@ -624,12 +652,24 @@ with tab1:
                         progress_bar.progress((idx + 1) / len(df))
                         continue
 
-                    m1_list = [m1_imgs[n] for n in m1_data] if m1_data else []
-                    m2_list = [m2_imgs[n] for n in m2_data] if m2_data else []
+                    m1_list = []
+                    m2_list = []
+
+                    if m1_data:
+                        for n in m1_data:
+                            if n in m1_imgs:
+                                m1_list.append(m1_imgs[n])
+
+                    if m2_data:
+                        for n in m2_data:
+                            if n in m2_imgs:
+                                m2_list.append(m2_imgs[n])
 
                     pdf_path = create_student_pdf(name, m1_list, m2_list, doc_title, output_dir)
+
                     if pdf_path:
                         temp_files.append((name, pdf_path))
+
                     progress_bar.progress((idx + 1) / len(df))
 
                 st.session_state.generated_files = temp_files
@@ -640,6 +680,7 @@ with tab1:
                     with zipfile.ZipFile(zip_buf, "w") as zipf:
                         for name, path in temp_files:
                             zipf.write(path, os.path.basename(path))
+
                     zip_buf.seek(0)
                     st.session_state.zip_buffer = zip_buf
 
@@ -650,29 +691,35 @@ with tab1:
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
-    # 결과 표시 로직 (원본)
     if st.session_state.generated_files or st.session_state.skipped_details:
         if st.session_state.skipped_details:
             total_skipped = sum(len(v) for v in st.session_state.skipped_details.values())
+
             if total_skipped > 0:
                 with st.expander(f"📋 생성 제외 명단 (총 {total_skipped}명) - 클릭하여 보기", expanded=True):
                     c1, c2, c3 = st.columns(3)
+
                     with c1:
                         st.markdown("**🏆 만점 (Perfect)**")
                         if st.session_state.skipped_details["만점"]:
-                            for n in st.session_state.skipped_details["만점"]: st.text(f"- {n}")
+                            for n in st.session_state.skipped_details["만점"]:
+                                st.text(f"- {n}")
                         else:
                             st.caption("없음")
+
                     with c2:
                         st.markdown("**⚠️ 하나 미제출**")
                         if st.session_state.skipped_details["M1/M2 하나 미제출"]:
-                            for n in st.session_state.skipped_details["M1/M2 하나 미제출"]: st.text(f"- {n}")
+                            for n in st.session_state.skipped_details["M1/M2 하나 미제출"]:
+                                st.text(f"- {n}")
                         else:
                             st.caption("없음")
+
                     with c3:
                         st.markdown("**❌ 미제출**")
                         if st.session_state.skipped_details["미제출"]:
-                            for n in st.session_state.skipped_details["미제출"]: st.text(f"- {n}")
+                            for n in st.session_state.skipped_details["미제출"]:
+                                st.text(f"- {n}")
                         else:
                             st.caption("없음")
 
@@ -689,21 +736,24 @@ with tab1:
             )
 
         st.subheader("👁️ 개별 PDF 다운로드")
+
         student_names = [name for name, _ in st.session_state.generated_files]
-        selected_student = st.selectbox("학생을 선택하세요", student_names, key="t1_select")
 
-        if selected_student:
-            file_map = {name: path for name, path in st.session_state.generated_files}
-            target_path = file_map[selected_student]
+        if student_names:
+            selected_student = st.selectbox("학생을 선택하세요", student_names, key="t1_select")
 
-            if os.path.exists(target_path):
-                with open(target_path, "rb") as f:
-                    st.download_button(
-                        f"📄 '{selected_student}' PDF 다운로드",
-                        f,
-                        file_name=f"{selected_student}_{doc_title}.pdf",
-                        key="t1_down_indiv"
-                    )
+            if selected_student:
+                file_map = {name: path for name, path in st.session_state.generated_files}
+                target_path = file_map[selected_student]
+
+                if os.path.exists(target_path):
+                    with open(target_path, "rb") as f:
+                        st.download_button(
+                            f"📄 '{selected_student}' PDF 다운로드",
+                            f,
+                            file_name=f"{selected_student}_{doc_title}.pdf",
+                            key="t1_down_indiv"
+                        )
 
 # ---------------------------------------------------------
 # [Tab 2] PDF 문제 자르기 (✅ 원본 그대로)
