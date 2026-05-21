@@ -75,8 +75,8 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     name_alias = {"이름", "name", "학생명", "학생이름", "studentname"}
-    m1_alias = {"module1", "모듈1", "m1", "module01", "m1틀린문제", "module1틀린문제", "m1wrong"}
-    m2_alias = {"module2", "모듈2", "m2", "module02", "m2틀린문제", "module2틀린문제", "m2wrong"}
+    m1_alias = {"module1", "모듈1", "m1", "module01", "m1틀린문제", "module1틀린문제", "m1wrong", "[M1] 점수"}
+    m2_alias = {"module2", "모듈2", "m2", "module02", "m2틀린문제", "module2틀린문제", "m2wrong", "[M2] 점수"}
 
     key_map = {c: keyify(c) for c in df.columns}
     rename_map = {}
@@ -514,7 +514,7 @@ with tab1:
 
     st.markdown("---")
     st.header("📄 문서 제목 입력")
-    doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1)", value="25 S2 SAT MATH 만점반 Mock Test1", key="t1_title")
+    doc_title = st.text_input("문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1, 26 6월대비 문풀반 MATH Mock1)", value="25 S2 SAT MATH 만점반 Mock Test1", key="t1_title")
 
     st.header("📦 파일 업로드")
 
