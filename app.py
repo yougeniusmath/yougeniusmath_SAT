@@ -583,7 +583,7 @@ with tab1:
             try:
                 m1_imgs, m2_imgs = extract_zip_to_dict(img_zip)
 
-                raw = pd.read_excel(excel_file)
+                raw = pd.read_excel(excel_file, header=1)
                 df = normalize_columns(raw)
 
                 required = {"이름", "Module1", "Module2"}
