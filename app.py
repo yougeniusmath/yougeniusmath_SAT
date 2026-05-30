@@ -175,9 +175,15 @@ def extract_zip_to_dict(zip_file):
     return m1_imgs, m2_imgs
 
 
-def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
+def create_student_pdf(name, m1_items, m2_items, doc_title, output_dir,
+                       m1_ans=None, m2_ans=None):
+    # m1_items / m2_items : [(문항번호, 이미지), ...]
+    # m1_ans / m2_ans     : {문항번호: "학생 답"}  (없으면 캡션 생략)
     if not font_ready:
         return None
+
+    m1_ans = m1_ans or {}
+    m2_ans = m2_ans or {}
 
     pdf = KoreanPDF()
     pdf.add_page()
@@ -185,17 +191,17 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
 
     pdf_cell_ln(pdf, 0, 8, f"<{name}_{doc_title}>")
 
-    def add_images(title, images):
+    def add_images(title, items, ans_map):
         est_height = 80
 
-        if images and (pdf.get_y() + 10 + est_height > pdf.page_break_trigger):
+        if items and (pdf.get_y() + 10 + est_height > pdf.page_break_trigger):
             pdf.add_page()
 
         pdf.set_font(pdf_font_name, size=10)
         pdf_cell_ln(pdf, 0, 8, title)
 
-        if images:
-            for img in images:
+        if items:
+            for qnum, img in items:
                 temp_filename = f"temp_{datetime.now().timestamp()}_{os.urandom(4).hex()}.jpg"
                 img.save(temp_filename)
 
@@ -206,22 +212,74 @@ def create_student_pdf(name, m1_imgs, m2_imgs, doc_title, output_dir):
                 except:
                     pass
 
+                # 문제 이미지 아래에 "내가 쓴 답" 캡션 (정답은 표시하지 않음)
+                ans = str(ans_map.get(qnum, "")).strip()
+                if ans:
+                    pdf.set_font(pdf_font_name, style='B', size=9)
+                    pdf_cell_ln(pdf, 0, 6, f"   \u21b3 \ub0b4\uac00 \uc4f4 \ub2f5: {ans}")
+                    pdf.set_font(pdf_font_name, size=10)
+
                 pdf.ln(8)
         else:
             pdf.ln(8)
 
-    add_images("<Module1>", m1_imgs)
-    add_images("<Module2>", m2_imgs)
+    add_images("<Module1>", m1_items, m1_ans)
+    add_images("<Module2>", m2_items, m2_ans)
 
     os.makedirs(output_dir, exist_ok=True)
     pdf_path = os.path.join(output_dir, f"{name}_{doc_title}.pdf")
     pdf.output(pdf_path)
 
     return pdf_path
-    
-# =========================================================
-# [Tab 2] PDF 문제 자르기 관련 상수 및 함수
-# =========================================================
+
+
+def _norm_qnum(t):
+    """문항번호 정규화: '22.0' -> '22', ' 8 ' -> '8' (이미지/답 매칭용)"""
+    t = str(t).strip()
+    try:
+        return str(int(float(t)))
+    except Exception:
+        return t
+
+
+def load_wrong_answers(excel_bytes):
+    """
+    ETA 엑셀의 'Wrong Answers' 시트를 읽어 학생 답 lookup을 만든다.
+    (ETA 앱스크립트의 '2-1. 오답(학생 답) 가져오기'가 생성하는 시트)
+    반환: {(이름, 'M1'/'M2', 문항번호str): '학생 답'}  — 시트가 없으면 빈 dict
+    """
+    try:
+        wa = pd.read_excel(io.BytesIO(excel_bytes), sheet_name="Wrong Answers")
+    except Exception:
+        return {}
+
+    wa.columns = [str(c).strip() for c in wa.columns]
+
+    def find_col(cands):
+        for c in wa.columns:
+            k = str(c).replace(" ", "")
+            if any(k == x.replace(" ", "") for x in cands):
+                return c
+        return None
+
+    name_c = find_col(["학생 이름", "이름", "name"])
+    mod_c  = find_col(["모듈", "module"])
+    q_c    = find_col(["문제 번호", "문항번호", "문제번호", "question"])
+    ans_c  = find_col(["학생 답", "학생답", "useranswer", "답"])
+    if not all([name_c, mod_c, q_c, ans_c]):
+        return {}
+
+    lookup = {}
+    for _, r in wa.iterrows():
+        name = str(r[name_c]).strip()
+        mod  = str(r[mod_c]).strip().upper()
+        qn   = _norm_qnum(r[q_c])
+        ans  = str(r[ans_c]).strip()
+        if name and mod and qn and ans and ans.lower() != "nan":
+            lookup[(name, mod, qn)] = ans
+    return lookup
+
+
 MODULE_RE = re.compile(r"<\s*MODULE\s*(\d+)\s*>", re.IGNORECASE)
 HEADER_FOOTER_HINT_RE = re.compile(
     r"(YOU,\s*GENIUS|700\+\s*MOCK\s*TEST|Kakaotalk|Instagram|010-\d{3,4}-\d{4}|Module\s*\d+|SECTION)",
@@ -583,8 +641,12 @@ with tab1:
             try:
                 m1_imgs, m2_imgs = extract_zip_to_dict(img_zip)
 
-                raw = pd.read_excel(excel_file, header=1)
+                excel_bytes = excel_file.getvalue() if hasattr(excel_file, "getvalue") else excel_file.read()
+                raw = pd.read_excel(io.BytesIO(excel_bytes), header=1)
                 df = normalize_columns(raw)
+
+                # 'Wrong Answers' 시트가 있으면 학생 답 lookup 생성 (없으면 빈 dict → 캡션 생략)
+                ans_lookup = load_wrong_answers(excel_bytes)
 
                 required = {"이름", "Module1", "Module2"}
                 missing = required - set(df.columns)
@@ -625,7 +687,7 @@ with tab1:
                          .replace(" ", "")
                     )
 
-                    nums = [t.strip() for t in s.split(",") if t.strip()]
+                    nums = [_norm_qnum(t) for t in s.split(",") if t.strip()]
                     return nums if nums else []
 
                 for idx, row in df.iterrows():
@@ -658,14 +720,21 @@ with tab1:
                     if m1_data:
                         for n in m1_data:
                             if n in m1_imgs:
-                                m1_list.append(m1_imgs[n])
+                                m1_list.append((n, m1_imgs[n]))
 
                     if m2_data:
                         for n in m2_data:
                             if n in m2_imgs:
-                                m2_list.append(m2_imgs[n])
+                                m2_list.append((n, m2_imgs[n]))
 
-                    pdf_path = create_student_pdf(name, m1_list, m2_list, doc_title, output_dir)
+                    # 이 학생의 문항별 '학생 답' 맵 (Wrong Answers 시트 기반)
+                    m1_ans = {n: ans_lookup.get((name, "M1", n), "") for n in (m1_data or [])}
+                    m2_ans = {n: ans_lookup.get((name, "M2", n), "") for n in (m2_data or [])}
+
+                    pdf_path = create_student_pdf(
+                        name, m1_list, m2_list, doc_title, output_dir,
+                        m1_ans=m1_ans, m2_ans=m2_ans
+                    )
 
                     if pdf_path:
                         temp_files.append((name, pdf_path))
@@ -2566,5 +2635,4 @@ with tab4:
         except Exception as e:
             st.error(f"오류 발생: {e}")
             st.exception(e)
-
 
