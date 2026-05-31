@@ -530,32 +530,37 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
             mcq_last = last_choice_bottom_y_in_band(page, y_start, y_cap)
             is_frq = (mcq_last is None)
 
-            if mcq_last is not None:
-                y_end = clamp(max(y_end, mcq_last + 18), y_start + 80, y_cap)
+            # 텍스트 기준 하단 (최소 보장용 floor — 캡으로 쓰지 않음)
+            text_bottom = content_bottom_y(page, y_start, y_cap)
 
-            bottom = content_bottom_y(page, y_start, y_end)
-            if bottom is not None and bottom > y_start + 140:
-                if mcq_last is not None:
-                    bottom = max(bottom, mcq_last + 10)
-                y_end = min(y_end, bottom + 14)
-
-            xb = text_x_bounds_in_band(page, y_start, y_end)
-            if xb is None:
-                x0, x1 = 0, w
-            else:
-                x0 = clamp(xb[0] - side_pad_pt, 0, w)
-                x1 = clamp(xb[1] + side_pad_pt, x0 + 80, w)
-
-            scan_clip = fitz.Rect(0, y_start, w, y_end)
+            # ✅ 핵심 수정:
+            #   보기가 그래프/이미지인 문제는 "C) D)" 글자 아래로 그림이 더 내려온다.
+            #   텍스트 하단으로 자르면 그림이 잘리므로, 잉크 스캔 범위를
+            #   "다음 문제 직전(y_cap)"까지 넓혀서 실제 그려진 내용(그래프 포함)의
+            #   맨 아래를 하단으로 잡는다.
+            scan_clip = fitz.Rect(0, y_start, w, y_cap)
             px_bbox = ink_bbox_by_raster(page, scan_clip)
+
             if px_bbox is not None:
                 tight = px_bbox_to_page_rect(scan_clip, px_bbox)
                 x0 = clamp(tight.x0, 0, w)
                 x1 = clamp(tight.x1, x0 + 80, w)
-                new_y_end = clamp(tight.y1, y_start + 80, y_end)
-                if mcq_last is not None:
-                    new_y_end = max(new_y_end, mcq_last + 12)
-                y_end = clamp(new_y_end, y_start + 80, y_end)
+                y_end = clamp(tight.y1, y_start + 80, y_cap)   # 그래프 잉크의 실제 바닥
+            else:
+                # 잉크 감지 실패 시에만 텍스트 기준으로 폴백
+                y_end = clamp((text_bottom + 14) if text_bottom else y_end, y_start + 80, y_cap)
+                xb = text_x_bounds_in_band(page, y_start, y_end)
+                if xb is None:
+                    x0, x1 = 0, w
+                else:
+                    x0 = clamp(xb[0] - side_pad_pt, 0, w)
+                    x1 = clamp(xb[1] + side_pad_pt, x0 + 80, w)
+
+            # 최소 보장: 보기 라벨/텍스트 하단보다는 아래로 (위로 잘리지 않게)
+            if mcq_last is not None:
+                y_end = clamp(max(y_end, mcq_last + 18), y_start + 80, y_cap)
+            if text_bottom is not None:
+                y_end = clamp(max(y_end, text_bottom + 10), y_start + 80, y_cap)
 
             if is_frq:
                 y_end = min(y_cap, y_end + frq_extra_pt)
@@ -1970,4 +1975,3 @@ with tab4:
         except Exception as e:
             st.error(f"오류 발생: {e}")
             st.exception(e)
-
