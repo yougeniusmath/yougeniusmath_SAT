@@ -626,8 +626,8 @@ with tab1:
     st.markdown("---")
     st.header("📄 문서 제목 입력")
     doc_title = st.text_input(
-        "문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1, 26 6월대비 문풀반 MATH Mock1)",
-        value="25 S2 SAT MATH 만점반 Mock Test1",
+        "문서 제목 (예: 26 여름 MATH [6]개념반 MOCK1, 26 6월대비 문풀반 MATH Mock1)",
+        value="26 여름 MATH [6]개념반 MOCK1",
         key="t1_title"
     )
 
