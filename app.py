@@ -375,8 +375,8 @@ def find_footer_start_y(page, y_from, y_to):
     ys = []
     page_h = page.rect.height
 
-    # ✅ 페이지 하단 18% 영역만 footer 후보로 봄 (너무 공격적이면 0.85~0.88로 올려도 됨)
-    bottom_zone_y = page_h * 0.82
+    # ✅ 페이지 하단 10% 영역만 페이지번호 후보로 봄 (문제 본문 숫자 오인 방지)
+    bottom_zone_y = page_h * 0.90
 
     for b in page.get_text("blocks"):
         if len(b) < 5:
@@ -400,7 +400,7 @@ def find_footer_start_y(page, y_from, y_to):
         #     - 하단 영역(bottom_zone) AND
         #     - 오른쪽 영역(페이지 폭의 60% 이후) AND
         #     - 텍스트가 숫자만
-        if (y0 >= bottom_zone_y) and (x0 >= page.rect.width * 0.60) and PAGE_NUM_ONLY_RE.match(t):
+        if (y0 >= bottom_zone_y) and (x0 >= page.rect.width * 0.60) and (len(t) <= 4) and PAGE_NUM_ONLY_RE.match(t):
             ys.append(y0)
 
     return min(ys) if ys else None
@@ -522,7 +522,13 @@ def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_ex
                 y_cap = h
                 y_end = clamp(h - 8, y_start + 80, h)
 
+            # footer(페이지번호/브랜딩) 감지
             footer_y = find_footer_start_y(page, y_start, y_cap)
+            # ✅ 보기(A)~D)) 라벨보다 '위'에서 잡힌 footer 후보는, 보기 안의 숫자(예: 분수의 '43')를
+            #    페이지번호로 오인한 것이므로 무시한다. (실제 footer는 항상 모든 보기 아래에 있음)
+            choice_probe = last_choice_bottom_y_in_band(page, y_start, y_cap)
+            if footer_y is not None and choice_probe is not None and footer_y <= choice_probe + 6:
+                footer_y = None
             if footer_y is not None and footer_y > y_start + 120:
                 y_cap = min(y_cap, footer_y - 4)
                 y_end = min(y_end, y_cap)
@@ -626,8 +632,8 @@ with tab1:
     st.markdown("---")
     st.header("📄 문서 제목 입력")
     doc_title = st.text_input(
-        "문서 제목 (예: 26 여름 MATH [6]개념반 MOCK1, 26 6월대비 문풀반 MATH Mock1)",
-        value="26 여름 MATH [6]개념반 MOCK1",
+        "문서 제목 (예: 25 S2 SAT MATH 만점반 Mock Test1, 26 6월대비 문풀반 MATH Mock1)",
+        value="25 S2 SAT MATH 만점반 Mock Test1",
         key="t1_title"
     )
 
