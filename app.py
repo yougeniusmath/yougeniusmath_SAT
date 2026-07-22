@@ -1953,6 +1953,11 @@ with tab4:
                         z.write(path, arcname=os.path.basename(path))
             img_zip_buf.seek(0)
 
+            # 개별 다운로드용으로 결과를 세션에 보관 (다운로드 클릭 후에도 목록 유지)
+            st.session_state["t4_made_images"] = made_images
+            st.session_state["t4_made_files"] = made_files
+            st.session_state["t4_date_str"] = generated_date4.strftime('%Y%m%d')
+
             st.success(f"✅ 생성 완료(Tab4): PDF {len(made_files)}개 / 이미지 {len(made_images)}개 (제외: {len(skipped)}명)")
             if skipped:
                 with st.expander(f"제외된 학생 ({len(skipped)}명) - 점수 blank"):
@@ -1981,3 +1986,35 @@ with tab4:
         except Exception as e:
             st.error(f"오류 발생: {e}")
             st.exception(e)
+
+    # ---------------------------------------------------------
+    # 👁️ 개별 성적표(PNG) 다운로드  (전체 ZIP은 위에 그대로 유지)
+    # ---------------------------------------------------------
+    t4_images = st.session_state.get("t4_made_images", [])
+
+    if t4_images:
+        st.markdown("---")
+        st.subheader("👁️ 개별 성적표(PNG) 다운로드")
+
+        t4_date_str = st.session_state.get("t4_date_str", "")
+        t4_names = [nm for nm, _ in t4_images]
+
+        selected_t4 = st.selectbox("학생을 선택하세요", t4_names, key="t4_select_student")
+
+        if selected_t4:
+            t4_map = {nm: p for nm, p in t4_images}
+            t4_path = t4_map.get(selected_t4)
+
+            if t4_path and os.path.exists(t4_path):
+                st.image(t4_path, caption=f"{selected_t4} 성적표 미리보기", width="stretch")
+
+                with open(t4_path, "rb") as f:
+                    st.download_button(
+                        f"🖼️ '{selected_t4}' 성적표 PNG 다운로드",
+                        data=f,
+                        file_name=f"{selected_t4}_{t4_date_str}.png",
+                        mime="image/png",
+                        key="t4_down_indiv_png"
+                    )
+            else:
+                st.warning("해당 학생의 PNG 파일을 찾을 수 없습니다. 다시 생성해 주세요.")
