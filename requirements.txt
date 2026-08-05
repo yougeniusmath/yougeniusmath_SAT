@@ -7,3 +7,4 @@ fpdf2
 Pillow
 pymupdf
 reportlab
+starlette<1.4
