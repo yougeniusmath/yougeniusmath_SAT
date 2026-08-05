@@ -280,7 +280,7 @@ def load_wrong_answers(excel_bytes):
     return lookup
 
 
-MODULE_RE = re.compile(r"<\s*MODULE\s*(\d+)\s*>", re.IGNORECASE)
+MODULE_RE = re.compile(r"<?\s*MODULE\s*(\d+)\s*>?", re.IGNORECASE)
 HEADER_FOOTER_HINT_RE = re.compile(
     r"(YOU,\s*GENIUS|700\+\s*MOCK\s*TEST|Kakaotalk|Instagram|010-\d{3,4}-\d{4}|Module\s*\d+|SECTION)",
     re.IGNORECASE,
@@ -315,47 +315,65 @@ def group_words_into_lines(words):
         lines[k].sort(key=lambda t: t[0])
     return list(lines.values())
 
-def detect_question_anchors(page, left_ratio=0.25, max_line_chars=4):
+def detect_question_anchors(page, left_ratio=0.25):
+    """
+    문제 번호(앵커)를 감지한다. 왼쪽 여백의 '첫 토큰'을 기준으로 판단해
+    번호가 본문과 한 줄로 붙은 경우/마침표 없는 번호/회색 박스 폰트('Ii1ii')도 잡는다.
+    마지막에 페이지 내에서 번호가 '단조 증가'하도록 필터링해 오탐을 제거한다.
+    """
     w_page = page.rect.width
     words = page.get_text("words")
     if not words: return []
-    lines = group_words_into_lines(words)
-    anchors = []
+    cands = []
 
-    for tokens in lines:
-        line_text = " ".join(t[4] for t in tokens).strip()
-        compact = re.sub(r"\s+", "", line_text)
-        if HEADER_FOOTER_HINT_RE.search(line_text): continue
-        if len(compact) > max_line_chars: continue
-        x_left = min(t[0] for t in tokens)
+    for tokens in group_words_into_lines(words):
+        ts = sorted(tokens, key=lambda t: t[0])
+        x_left = ts[0][0]
         if x_left > w_page * left_ratio: continue
-
+        line_text = " ".join(t[4] for t in ts).strip()
+        if HEADER_FOOTER_HINT_RE.search(line_text): continue
+        compact = re.sub(r"\s+", "", line_text)
+        first = ts[0][4]
+        y_top = ts[0][1]
         qnum = None
-        y_top = None
 
-        # case 1: "21."
-        for (x0, y0, x1, y1, txt) in tokens:
-            m = NUMDOT_RE.match(txt)
-            if m:
-                qnum = int(m.group(1))
-                y_top = y0
-                break
+        # case 1: 'N.' (첫 토큰) — 번호 뒤에 본문이 붙어 있어도 인식
+        m = NUMDOT_RE.match(first)
+        if m:
+            qnum = int(m.group(1))
 
-        # case 2: "21" "."  (words 분리)
-        if qnum is None:
-            for i in range(len(tokens) - 1):
-                t1 = tokens[i][4]
-                t2 = tokens[i + 1][4]
-                if NUM_RE.match(t1) and t2 == ".":
-                    qnum = int(t1)
-                    y_top = tokens[i][1]
-                    break
+        # case 2: 'N' '.' (words 분리)
+        if qnum is None and len(ts) >= 2 and NUM_RE.match(first) and ts[1][4] == ".":
+            qnum = int(first)
 
-        if qnum is None: continue
-        if not (1 <= qnum <= 22): continue
-        anchors.append((qnum, y_top))
+        # case 3: 회색 박스 폰트 (예: 'Ii1ii', 'Ii10ii', 'Ii212i'=21) — 짧은 줄만
+        if qnum is None and len(compact) <= 8:
+            core = re.sub(r"^[Iil|]+", "", compact)     # 앞쪽 장식문자 제거
+            dm = re.match(r"^(\d+)", core)
+            if dm and re.search(r"[Iil|]", compact):    # 장식문자가 있어야 박스로 확증
+                digs = dm.group(1)
+                c2 = int(digs[:2]) if len(digs) >= 2 else None
+                c1 = int(digs[:1])
+                if c2 is not None and 1 <= c2 <= 22:
+                    qnum = c2
+                elif 1 <= c1 <= 22:
+                    qnum = c1
 
-    anchors.sort(key=lambda t: t[1])
+        # case 4: 마침표 없는 맨 왼쪽 단독 숫자 (예: '16') — 아주 왼쪽만
+        if qnum is None and NUM_RE.fullmatch(first) and x_left <= w_page * 0.12:
+            qnum = int(first)
+
+        if qnum is None or not (1 <= qnum <= 22): continue
+        cands.append((qnum, y_top))
+
+    # 페이지 내 y 순서로 단조 증가만 유지 (본문 속 숫자 등 오탐 제거)
+    cands.sort(key=lambda t: t[1])
+    anchors = []
+    last = 0
+    for q, y in cands:
+        if q > last:
+            anchors.append((q, y))
+            last = q
     return anchors
 
 def band_text(page, clip):
@@ -483,7 +501,7 @@ def expand_rect_to_width_right_only(rect, target_width, page_width):
 def compute_rects_for_pdf(pdf_bytes, zoom=3.0, pad_top=10, pad_bottom=12, frq_extra_space_px=250):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     rects = []
-    current_module = None
+    current_module = 1   # M1 구간에 모듈 표시가 없는 PDF 대비 (MODULE 2 만나면 2로 전환)
     side_pad_pt = SIDE_PAD_PX / zoom
     frq_extra_pt = frq_extra_space_px / zoom
 
