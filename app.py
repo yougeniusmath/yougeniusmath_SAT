@@ -317,14 +317,18 @@ def group_words_into_lines(words):
 
 def detect_question_anchors(page, left_ratio=0.25):
     """
-    문제 번호(앵커)를 감지한다. 왼쪽 여백의 '첫 토큰'을 기준으로 판단해
-    번호가 본문과 한 줄로 붙은 경우/마침표 없는 번호/회색 박스 폰트('Ii1ii')도 잡는다.
+    문제 번호(앵커)를 감지한다.
+      - 강한 앵커: 'N.' / 'N' '.' / 회색 박스 폰트('Ii1ii') → 신뢰도 높음
+      - 약한 앵커: 마침표 없는 '단독' 숫자(예: '16') → 본문 숫자와 헷갈리므로,
+                  같은 페이지의 강한 앵커들과 '같은 x열(번호 열)'에 정렬된 것만 인정
     마지막에 페이지 내에서 번호가 '단조 증가'하도록 필터링해 오탐을 제거한다.
     """
     w_page = page.rect.width
     words = page.get_text("words")
     if not words: return []
-    cands = []
+
+    strong = []   # (qnum, y, x)  — N. / N . / 박스형
+    weak = []     # (qnum, y, x)  — 마침표 없는 단독 숫자
 
     for tokens in group_words_into_lines(words):
         ts = sorted(tokens, key=lambda t: t[0])
@@ -335,36 +339,41 @@ def detect_question_anchors(page, left_ratio=0.25):
         compact = re.sub(r"\s+", "", line_text)
         first = ts[0][4]
         y_top = ts[0][1]
-        qnum = None
 
-        # case 1: 'N.' (첫 토큰) — 번호 뒤에 본문이 붙어 있어도 인식
+        # 강한 case 1: 'N.' (첫 토큰) — 번호 뒤에 본문이 붙어 있어도 인식
         m = NUMDOT_RE.match(first)
-        if m:
-            qnum = int(m.group(1))
+        if m and 1 <= int(m.group(1)) <= 22:
+            strong.append((int(m.group(1)), y_top, x_left)); continue
 
-        # case 2: 'N' '.' (words 분리)
-        if qnum is None and len(ts) >= 2 and NUM_RE.match(first) and ts[1][4] == ".":
-            qnum = int(first)
+        # 강한 case 2: 'N' '.' (words 분리)
+        if len(ts) >= 2 and NUM_RE.match(first) and ts[1][4] == "." and 1 <= int(first) <= 22:
+            strong.append((int(first), y_top, x_left)); continue
 
-        # case 3: 회색 박스 폰트 (예: 'Ii1ii', 'Ii10ii', 'Ii212i'=21) — 짧은 줄만
-        if qnum is None and len(compact) <= 8:
+        # 강한 case 3: 회색 박스 폰트 (예: 'Ii1ii', 'Ii10ii', 'Ii212i'=21) — 짧은 줄만
+        if len(compact) <= 8:
             core = re.sub(r"^[Iil|]+", "", compact)     # 앞쪽 장식문자 제거
             dm = re.match(r"^(\d+)", core)
             if dm and re.search(r"[Iil|]", compact):    # 장식문자가 있어야 박스로 확증
                 digs = dm.group(1)
                 c2 = int(digs[:2]) if len(digs) >= 2 else None
                 c1 = int(digs[:1])
-                if c2 is not None and 1 <= c2 <= 22:
-                    qnum = c2
-                elif 1 <= c1 <= 22:
-                    qnum = c1
+                qbox = c2 if (c2 is not None and 1 <= c2 <= 22) else (c1 if 1 <= c1 <= 22 else None)
+                if qbox is not None:
+                    strong.append((qbox, y_top, x_left)); continue
 
-        # case 4: 마침표 없는 맨 왼쪽 단독 숫자 (예: '16') — 아주 왼쪽만
-        if qnum is None and NUM_RE.fullmatch(first) and x_left <= w_page * 0.12:
-            qnum = int(first)
+        # 약한 case 4: 줄 전체가 '숫자 하나'뿐인 경우만 (예: '16') — 본문 숫자 오인 방지
+        if NUM_RE.fullmatch(compact) and 1 <= int(compact) <= 22:
+            weak.append((int(compact), y_top, x_left))
 
-        if qnum is None or not (1 <= qnum <= 22): continue
-        cands.append((qnum, y_top))
+    # 번호 열(x): 강한 앵커들의 최소 x. 약한 앵커는 이 열에 정렬(±4px)된 것만 인정.
+    col_x = min((x for _, _, x in strong), default=None)
+    cands = [(q, y) for (q, y, x) in strong]
+    for q, y, x in weak:
+        if col_x is not None:
+            if abs(x - col_x) <= 4:
+                cands.append((q, y))
+        elif x <= w_page * 0.10:   # 강한 앵커가 하나도 없으면 아주 왼쪽만
+            cands.append((q, y))
 
     # 페이지 내 y 순서로 단조 증가만 유지 (본문 속 숫자 등 오탐 제거)
     cands.sort(key=lambda t: t[1])
